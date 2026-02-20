@@ -15,7 +15,17 @@ export function Home() {
             </div>
 
             <div style={styles.footer}>
-                Данные предоставлены сервисом <a href="https://wahapedia.ru/" target="_blank" rel="noopener noreferrer" style={styles.link}>Wahapedia</a>.
+                <div>
+                    Данные предоставлены сервисом <a href="https://wahapedia.ru/" target="_blank" rel="noopener noreferrer" style={styles.link}>Wahapedia</a>.
+                </div>
+
+                <div style={{ marginTop: 8, color: '#ccc' }}>Created by Alexandr Zaytsev</div>
+
+                <div style={{ marginTop: 8 }}>
+                    <a href="https://t.me/Shooshpanius" target="_blank" rel="noopener noreferrer" style={styles.button}>Telegram @Shooshpanius</a>
+                    <a href="mailto:admin@in-da-house.ru" style={{ ...styles.button, marginLeft: 8 }}>Email</a>
+                    <a href="https://github.com/Shooshpanius" target="_blank" rel="noopener noreferrer" style={{ ...styles.button, marginLeft: 8 }}>GitHub</a>
+                </div>
             </div>
         </div>
     );
@@ -46,4 +56,13 @@ const styles: Record<string, React.CSSProperties> = {
     },
     footer: { marginTop: 28, color: '#999', fontSize: '0.9rem', textAlign: 'center' },
     link: { color: '#e8c170', textDecoration: 'none' },
+    button: {
+        display: 'inline-block',
+        padding: '6px 10px',
+        background: '#e8c170',
+        color: '#0b0b1a',
+        borderRadius: 6,
+        textDecoration: 'none',
+        fontSize: '0.85rem',
+    },
 };
