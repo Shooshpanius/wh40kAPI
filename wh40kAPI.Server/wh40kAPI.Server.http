@@ -1,0 +1,6 @@
+@wh40kAPI.Server_HostAddress = http://localhost:5264
+
+GET {{wh40kAPI.Server_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

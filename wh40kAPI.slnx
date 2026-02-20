@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="wh40kapi.client/wh40kapi.client.esproj">
+    <Build />
+    <Deploy />
+  </Project>
+  <Project Path="wh40kAPI.Server/wh40kAPI.Server.csproj" />
+</Solution>
