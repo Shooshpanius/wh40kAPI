@@ -6,7 +6,7 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <SpaRoot>..\wh40kapi.client</SpaRoot>
     <SpaProxyLaunchCommand>npm run dev</SpaProxyLaunchCommand>
-    <SpaProxyServerUrl>https://localhost:51018</SpaProxyServerUrl>
+    <SpaProxyServerUrl>http://localhost:51018</SpaProxyServerUrl>
   </PropertyGroup>
 
   <ItemGroup>
