@@ -13,6 +13,10 @@ export function Home() {
                 <Card title="Enhancements" desc="Character enhancements" href="/enhancements" />
                 <Card title="API Docs" desc="Swagger / Scalar UI" href="/scalar/v1" external />
             </div>
+
+            <div style={styles.footer}>
+                Данные предоставлены сервисом <a href="https://wahapedia.ru/" target="_blank" rel="noopener noreferrer" style={styles.link}>Wahapedia</a>.
+            </div>
         </div>
     );
 }
@@ -40,4 +44,6 @@ const styles: Record<string, React.CSSProperties> = {
         display: 'block',
         transition: 'border-color 0.2s',
     },
+    footer: { marginTop: 28, color: '#999', fontSize: '0.9rem', textAlign: 'center' },
+    link: { color: '#e8c170', textDecoration: 'none' },
 };
