@@ -370,3 +370,5 @@ FodyWeavers.xsd
 # Runtime logs
 nohup.out
 wh40kapi.client/obj/
+# .esproj build cache (appears with backslash paths on some hosts)
+wh40kapi.client/obj\Debug/
