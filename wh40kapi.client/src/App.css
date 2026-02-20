@@ -1,11 +1,11 @@
 ﻿#root {
-    max-width: 1280px;
-    margin: 0 auto;
-    padding: 2rem;
-    text-align: center;
+    min-height: 100vh;
+    background: #0d0d1a;
 }
 
-th, td {
-    padding-left: 1rem;
-    padding-right: 1rem;
+body {
+    margin: 0;
+    background: #0d0d1a;
+    color: #ccc;
+    font-family: 'Segoe UI', system-ui, sans-serif;
 }
