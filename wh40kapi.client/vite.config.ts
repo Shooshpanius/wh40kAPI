@@ -33,6 +33,6 @@ export default defineConfig({
         },
         port: parseInt(env.DEV_SERVER_PORT || '51018'),
         // Disable HTTPS for the Vite dev server and use plain HTTP
-        https: false
+        //https: false
     }
 })
