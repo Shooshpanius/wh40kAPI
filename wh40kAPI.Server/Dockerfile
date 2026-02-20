@@ -13,18 +13,18 @@ RUN apt-get -y install nodejs
 FROM with-node AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
-COPY .  KT.Server/
-RUN dotnet restore "./KT.Server/KT.Server.csproj"
+COPY .  wh40kAPI.Server/
+RUN dotnet restore "./wh40kAPI.Server/wh40kAPI.Server.csproj"
 COPY . .
-WORKDIR "/src/KT.Server"
-RUN dotnet build "./KT.Server.csproj" -c $BUILD_CONFIGURATION -o /app/build
+WORKDIR "/src/wh40kAPI.Server"
+RUN dotnet build "./wh40kAPI.Server.csproj" -c $BUILD_CONFIGURATION -o /app/build
 
 FROM build AS publish
 ARG BUILD_CONFIGURATION=Release
-RUN dotnet publish "./KT.Server.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
+RUN dotnet publish "./wh40kAPI.Server.csproj" -c $BUILD_CONFIGURATION -o /app/publish /p:UseAppHost=false
 
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
 
-ENTRYPOINT ["dotnet", "KT.Server.dll"]
+ENTRYPOINT ["dotnet", "wh40kAPI.Server.dll"]
