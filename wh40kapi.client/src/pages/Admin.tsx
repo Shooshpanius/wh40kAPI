@@ -36,6 +36,11 @@ export function Admin() {
     const [bsDataMsg, setBsDataMsg] = useState('');
     const [bsDataError, setBsDataError] = useState('');
 
+    const [ktBsDataStatus, setKtBsDataStatus] = useState<BsDataStatus | null>(null);
+    const [ktBsDataImporting, setKtBsDataImporting] = useState(false);
+    const [ktBsDataMsg, setKtBsDataMsg] = useState('');
+    const [ktBsDataError, setKtBsDataError] = useState('');
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setAuthLoading(true);
@@ -49,6 +54,7 @@ export function Admin() {
                 setAuthenticated(true);
                 loadStatus();
                 loadBsDataStatus();
+                loadKtBsDataStatus();
             } else {
                 setAuthError('Invalid password. Please try again.');
             }
@@ -77,6 +83,17 @@ export function Admin() {
                 headers: { 'X-Admin-Password': password },
             });
             if (res.ok) setBsDataStatus(await res.json());
+        } catch {
+            // ignore
+        }
+    };
+
+    const loadKtBsDataStatus = async () => {
+        try {
+            const res = await fetch('/api/ktbsdata-admin/status', {
+                headers: { 'X-Admin-Password': password },
+            });
+            if (res.ok) setKtBsDataStatus(await res.json());
         } catch {
             // ignore
         }
@@ -130,6 +147,29 @@ export function Admin() {
             setBsDataError('Import error: ' + String(err));
         } finally {
             setBsDataImporting(false);
+        }
+    };
+
+    const handleKtBsDataImport = async () => {
+        setKtBsDataImporting(true);
+        setKtBsDataMsg('');
+        setKtBsDataError('');
+        try {
+            const res = await fetch('/api/ktbsdata-admin/import', {
+                method: 'POST',
+                headers: { 'X-Admin-Password': password },
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setKtBsDataMsg(data.message ?? 'Import successful!');
+                loadKtBsDataStatus();
+            } else {
+                setKtBsDataError(data.title ?? data.message ?? 'Import failed.');
+            }
+        } catch (err) {
+            setKtBsDataError('Import error: ' + String(err));
+        } finally {
+            setKtBsDataImporting(false);
         }
     };
 
@@ -226,6 +266,33 @@ export function Admin() {
                 </button>
                 {bsDataMsg && <p style={styles.success}>{bsDataMsg}</p>}
                 {bsDataError && <p style={styles.error}>{bsDataError}</p>}
+            </div>
+
+            <div style={styles.section}>
+                <h3 style={styles.sectionTitle}>BSData Kill Team Database</h3>
+                <p style={styles.hint}>
+                    Fetch and import data from the{' '}
+                    <a href="https://github.com/BSData/wh40k-killteam" target="_blank" rel="noopener noreferrer" style={styles.link}>
+                        BSData/wh40k-killteam
+                    </a>{' '}
+                    GitHub repository. This will replace all existing Kill Team BSData records.
+                </p>
+                {ktBsDataStatus && (
+                    <div style={{ ...styles.statusGrid, marginBottom: 16 }}>
+                        <StatusCard label="Catalogues" value={ktBsDataStatus.catalogues} />
+                        <StatusCard label="Units" value={ktBsDataStatus.units} />
+                        <StatusCard label="Profiles" value={ktBsDataStatus.profiles} />
+                    </div>
+                )}
+                <button
+                    style={styles.btn}
+                    onClick={handleKtBsDataImport}
+                    disabled={ktBsDataImporting}
+                >
+                    {ktBsDataImporting ? 'Importing...' : '⬇ Получить данные killteam-BSData'}
+                </button>
+                {ktBsDataMsg && <p style={styles.success}>{ktBsDataMsg}</p>}
+                {ktBsDataError && <p style={styles.error}>{ktBsDataError}</p>}
             </div>
         </div>
     );

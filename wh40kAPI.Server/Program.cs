@@ -44,8 +44,28 @@ var bsDataServerVersion = ServerVersion.AutoDetect(bsDataConnectionString);
 builder.Services.AddDbContext<BsDataDbContext>(options =>
     options.UseMySql(bsDataConnectionString, bsDataServerVersion));
 
+// KT BSData separate database
+string? ktBsDataConnectionString;
+if (builder.Environment.IsProduction())
+{
+    ktBsDataConnectionString = Environment.GetEnvironmentVariable("ConnectionStrings__KtBsDataConnection")
+        ?? builder.Configuration.GetConnectionString("KtBsDataConnection");
+}
+else
+{
+    ktBsDataConnectionString = builder.Configuration.GetConnectionString("KtBsDataConnection");
+}
+
+if (string.IsNullOrEmpty(ktBsDataConnectionString))
+    throw new InvalidOperationException("Connection string 'KtBsDataConnection' not found.");
+
+var ktBsDataServerVersion = ServerVersion.AutoDetect(ktBsDataConnectionString);
+builder.Services.AddDbContext<KtBsDataDbContext>(options =>
+    options.UseMySql(ktBsDataConnectionString, ktBsDataServerVersion));
+
 builder.Services.AddScoped<DataImportService>();
 builder.Services.AddScoped<BsDataImportService>();
+builder.Services.AddScoped<KtBsDataImportService>();
 builder.Services.AddHttpClient("github", client =>
 {
     client.DefaultRequestHeaders.UserAgent.ParseAdd("wh40kAPI/1.0");
@@ -64,6 +84,9 @@ using (var scope = app.Services.CreateScope())
 
     var bsDb = scope.ServiceProvider.GetRequiredService<BsDataDbContext>();
     bsDb.Database.EnsureCreated();
+
+    var ktBsDb = scope.ServiceProvider.GetRequiredService<KtBsDataDbContext>();
+    ktBsDb.Database.EnsureCreated();
 }
 
 app.UseDefaultFiles();
