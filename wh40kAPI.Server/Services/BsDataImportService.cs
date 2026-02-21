@@ -27,6 +27,11 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
 
         int totalUnits = 0;
 
+        // Keep global seen sets to avoid adding entities with duplicate primary keys
+        var seenCatalogueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenUnitIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenProfileIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         // 3. Process each .cat file
         foreach (var (fileName, downloadUrl) in catFiles)
         {
@@ -38,11 +43,49 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
 
                 if (catalogue == null) continue;
 
-                db.Catalogues.Add(catalogue);
-                db.Units.AddRange(units);
-                db.Profiles.AddRange(profiles);
+                if (!seenCatalogueIds.Add(catalogue.Id))
+                {
+                    logger.LogWarning("Skipping catalogue {Id} from {File} — duplicate id", catalogue.Id, fileName);
+                }
+                else
+                {
+                    db.Catalogues.Add(catalogue);
+                }
 
-                totalUnits += units.Count;
+                var newUnits = new List<BsDataUnit>();
+                foreach (var u in units)
+                {
+                    if (string.IsNullOrEmpty(u.Id)) continue;
+                    if (!seenUnitIds.Add(u.Id))
+                    {
+                        logger.LogDebug("Skipping duplicate unit {UnitId} from {File}", u.Id, fileName);
+                        continue;
+                    }
+                    newUnits.Add(u);
+                }
+
+                var newProfiles = new List<BsDataProfile>();
+                foreach (var p in profiles)
+                {
+                    if (string.IsNullOrEmpty(p.Id)) continue;
+                    if (!seenProfileIds.Add(p.Id))
+                    {
+                        logger.LogDebug("Skipping duplicate profile {ProfileId} from {File}", p.Id, fileName);
+                        continue;
+                    }
+                    newProfiles.Add(p);
+                }
+
+                if (newUnits.Count > 0)
+                {
+                    db.Units.AddRange(newUnits);
+                    totalUnits += newUnits.Count;
+                }
+
+                if (newProfiles.Count > 0)
+                {
+                    db.Profiles.AddRange(newProfiles);
+                }
             }
             catch (Exception ex)
             {
