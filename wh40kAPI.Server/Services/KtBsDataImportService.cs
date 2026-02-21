@@ -26,6 +26,7 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
         await db.Catalogues.ExecuteDeleteAsync();
 
         int totalUnits = 0;
+        int totalProfiles = 0;
 
         // Keep global seen sets to avoid adding entities with duplicate primary keys
         var seenCatalogueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -70,13 +71,9 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
                 }
 
                 var newProfiles = new List<KtBsDataProfile>();
-                // Keep track of which profile tables we've initialized in this run
-                var initializedProfileTables = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
                 foreach (var p in profiles)
                 {
                     if (string.IsNullOrEmpty(p.Id)) continue;
-                    // Ensure TypeName is non-null
                     p.TypeName ??= string.Empty;
 
                     var compositeKey = $"{p.UnitId}|{p.Id}|{p.TypeName}";
@@ -86,26 +83,19 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
                         continue;
                     }
 
-                    // Determine target table name based on TypeName
-                    var tableName = GetProfileTableName(p.TypeName);
-
-                    // Ensure table exists and is truncated on first use
-                    if (!initializedProfileTables.Contains(tableName))
-                    {
-                        await EnsureProfileTableExistsAsync(tableName);
-                        // Clear previous data in that table for fresh import
-                        await db.Database.ExecuteSqlRawAsync($"TRUNCATE TABLE `{tableName}`;");
-                        initializedProfileTables.Add(tableName);
-                    }
-
-                    // Insert into specific table using parameterized SQL
-                    await InsertProfileIntoTableAsync(tableName, p);
+                    newProfiles.Add(p);
                 }
 
                 if (newUnits.Count > 0)
                 {
                     db.Units.AddRange(newUnits);
                     totalUnits += newUnits.Count;
+                }
+
+                if (newProfiles.Count > 0)
+                {
+                    db.Profiles.AddRange(newProfiles);
+                    totalProfiles += newProfiles.Count;
                 }
             }
             catch (Exception ex)
@@ -115,6 +105,7 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
         }
 
         await db.SaveChangesAsync();
+        logger.LogInformation("Import complete. Units: {TotalUnits}, Profiles: {TotalProfiles}", totalUnits, totalProfiles);
         return totalUnits;
     }
 
@@ -246,35 +237,4 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
         }
     }
 
-    private static string GetProfileTableName(string typeName)
-    {
-        // Sanitize type name to use in table name: allow letters, numbers and underscore
-        if (string.IsNullOrWhiteSpace(typeName)) return "kt_profiles_default";
-        var sanitized = System.Text.RegularExpressions.Regex.Replace(typeName.ToLowerInvariant(), "[^a-z0-9_]", "_");
-        if (sanitized.Length == 0) return "kt_profiles_default";
-        // Limit length to avoid overly long table names
-        if (sanitized.Length > 50) sanitized = sanitized.Substring(0, 50);
-        return $"kt_profiles_{sanitized}";
-    }
-
-    private async Task EnsureProfileTableExistsAsync(string tableName)
-    {
-        // Create table if not exists with columns matching KtBsDataProfile (TypeName stored as well)
-        var createSql = $@"CREATE TABLE IF NOT EXISTS `{tableName}` (
-            `UnitId` varchar(255) NOT NULL,
-            `Id` varchar(255) NOT NULL,
-            `Name` varchar(255) NULL,
-            `TypeName` varchar(255) NULL,
-            `Characteristics` longtext NULL,
-            PRIMARY KEY (`UnitId`,`Id`)
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;";
-
-        await db.Database.ExecuteSqlRawAsync(createSql);
-    }
-
-    private async Task InsertProfileIntoTableAsync(string tableName, KtBsDataProfile p)
-    {
-        // Use parameterized interpolated SQL for values; table name is sanitized by GetProfileTableName
-        await db.Database.ExecuteSqlInterpolatedAsync($"INSERT INTO `{tableName}` (UnitId, Id, Name, TypeName, Characteristics) VALUES ({p.UnitId}, {p.Id}, {p.Name}, {p.TypeName}, {p.Characteristics}) ON DUPLICATE KEY UPDATE Name = VALUES(Name), TypeName = VALUES(TypeName), Characteristics = VALUES(Characteristics);");
-    }
 }
