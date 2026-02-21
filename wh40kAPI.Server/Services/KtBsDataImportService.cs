@@ -122,6 +122,7 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
         foreach (var item in doc.RootElement.EnumerateArray())
         {
             var name = item.GetProperty("name").GetString() ?? "";
+            if (!name.StartsWith("2024", StringComparison.OrdinalIgnoreCase)) continue;
             if (!name.EndsWith(".cat", StringComparison.OrdinalIgnoreCase))
                 continue;
 
