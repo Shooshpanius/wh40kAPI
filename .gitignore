@@ -372,3 +372,4 @@ nohup.out
 wh40kapi.client/obj/
 # .esproj build cache (appears with backslash paths on some hosts)
 wh40kapi.client/obj\Debug/
+wh40kapi.client/obj\\Debug/
