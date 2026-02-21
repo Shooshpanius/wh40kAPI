@@ -3,9 +3,9 @@ import { NavLink } from 'react-router-dom';
 export function NavBar() {
     return (
         <nav style={styles.nav}>
-            <span style={styles.brand}>⚔️ WH40K API</span>
+            <NavLink to="/" style={styles.brand} end>⚔️ WH40K API</NavLink>
             <div style={styles.links}>
-                <NavLink to="/" style={navStyle} end>Home</NavLink>
+                <NavLink to="/wahapedia" style={navStyle}>Wahapedia</NavLink>
                 <NavLink to="/factions" style={navStyle}>Factions</NavLink>
                 <NavLink to="/datasheets" style={navStyle}>Datasheets</NavLink>
                 <NavLink to="/detachments" style={navStyle}>Detachments</NavLink>
@@ -38,6 +38,7 @@ const styles: Record<string, React.CSSProperties> = {
         fontWeight: 700,
         fontSize: '1.2rem',
         marginRight: '24px',
+        textDecoration: 'none',
     },
     links: {
         display: 'flex',

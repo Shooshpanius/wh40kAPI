@@ -1,0 +1,102 @@
+export function StartPage() {
+    return (
+        <div style={styles.container}>
+            <h1 style={styles.title}>⚔️ Warhammer 40,000 API Hub</h1>
+            <p style={styles.subtitle}>Выберите один из доступных API</p>
+            <div style={styles.cards}>
+                <ApiCard
+                    title="API Wahapedia 40k"
+                    desc="Фракции, юниты, отряды, стратагемы и улучшения. Данные от Wahapedia."
+                    href="/wahapedia"
+                    available
+                />
+                <ApiCard
+                    title="API BSData 40k"
+                    desc="Данные Warhammer 40,000 из репозитория BSData. В разработке."
+                    href="/bsdata-40k"
+                    available={false}
+                />
+                <ApiCard
+                    title="API BSData Kill Team"
+                    desc="Данные Kill Team из репозитория BSData. В разработке."
+                    href="/bsdata-killteam"
+                    available={false}
+                />
+            </div>
+
+            <div style={styles.footer}>
+                <div style={{ color: '#ccc' }}>Created by Alexandr Zaytsev</div>
+                <div style={{ marginTop: 8 }}>
+                    <a href="https://t.me/Shooshpanius" target="_blank" rel="noopener noreferrer" style={styles.button}>Telegram @Shooshpanius</a>
+                    <a href="mailto:admin@in-da-house.ru" style={{ ...styles.button, marginLeft: 8 }}>Email</a>
+                    <a href="https://github.com/Shooshpanius" target="_blank" rel="noopener noreferrer" style={{ ...styles.button, marginLeft: 8 }}>GitHub</a>
+                </div>
+            </div>
+        </div>
+    );
+}
+
+function ApiCard({ title, desc, href, available }: { title: string; desc: string; href: string; available: boolean }) {
+    const content = (
+        <>
+            <div style={styles.badge}>
+                {available
+                    ? <span style={styles.badgeAvailable}>Доступно</span>
+                    : <span style={styles.badgeSoon}>Скоро</span>
+                }
+            </div>
+            <h2 style={{ margin: '8px 0 0', color: '#e8c170', fontSize: '1.2rem' }}>{title}</h2>
+            <p style={{ margin: '8px 0 0', color: '#aaa', fontSize: '0.95rem' }}>{desc}</p>
+        </>
+    );
+    if (!available) {
+        return <div style={{ ...styles.card, ...styles.cardDisabled }} aria-disabled="true">{content}</div>;
+    }
+    return <a href={href} style={styles.card}>{content}</a>;
+}
+
+const styles: Record<string, React.CSSProperties> = {
+    container: { maxWidth: 900, margin: '60px auto', padding: '0 24px', textAlign: 'center' },
+    title: { color: '#e8c170', fontSize: '2.2rem', marginBottom: '8px' },
+    subtitle: { color: '#ccc', marginBottom: '40px', fontSize: '1.1rem' },
+    cards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px', textAlign: 'left' },
+    card: {
+        background: '#1a1a2e',
+        border: '1px solid #8b0000',
+        borderRadius: 10,
+        padding: '24px',
+        textDecoration: 'none',
+        display: 'block',
+        transition: 'border-color 0.2s',
+    },
+    cardDisabled: {
+        opacity: 0.6,
+    },
+    badge: { marginBottom: 4 },
+    badgeAvailable: {
+        background: '#2a5e3a',
+        color: '#7ddc9a',
+        borderRadius: 4,
+        padding: '2px 8px',
+        fontSize: '0.75rem',
+        fontWeight: 700,
+    },
+    badgeSoon: {
+        background: '#3a3a1a',
+        color: '#c8c870',
+        borderRadius: 4,
+        padding: '2px 8px',
+        fontSize: '0.75rem',
+        fontWeight: 700,
+    },
+    footer: { marginTop: 48, color: '#999', fontSize: '0.9rem', textAlign: 'center' },
+    button: {
+        display: 'inline-block',
+        padding: '6px 10px',
+        background: '#e8c170',
+        color: '#0b0b1a',
+        borderRadius: 6,
+        textDecoration: 'none',
+        fontSize: '0.85rem',
+    },
+};
