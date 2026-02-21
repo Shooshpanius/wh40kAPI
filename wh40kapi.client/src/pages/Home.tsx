@@ -15,8 +15,8 @@ export function Home() {
             </div>
 
             <div style={styles.footer}>
-                <div>
-                    Данные предоставлены сервисом <a href="https://wahapedia.ru/" target="_blank" rel="noopener noreferrer" style={styles.link}>Wahapedia</a>.
+                <div style={{ color: 'rgb(232, 193, 112)', fontSize: '0.95rem' }}>
+                    Данные предоставлены сервисом <a href="https://wahapedia.ru/" target="_blank" rel="noopener noreferrer" style={{ color: 'rgb(232, 193, 112)', textDecoration: 'none', fontWeight: 700 }}>Wahapedia</a>
                 </div>
 
                 <div style={{ marginTop: 8, color: '#ccc' }}>Created by Alexandr Zaytsev</div>

@@ -6,7 +6,7 @@ export function StartPage() {
             <div style={styles.cards}>
                 <ApiCard
                     title="API Wahapedia 40k"
-                    desc="Фракции, юниты, отряды, стратагемы и улучшения. Данные от Wahapedia."
+                    desc="Фракции, юниты, отряды, стратагемы и улучшения."
                     href="/wahapedia"
                     available
                 />
@@ -47,6 +47,12 @@ function ApiCard({ title, desc, href, available }: { title: string; desc: string
             </div>
             <h2 style={{ margin: '8px 0 0', color: '#e8c170', fontSize: '1.2rem' }}>{title}</h2>
             <p style={{ margin: '8px 0 0', color: '#aaa', fontSize: '0.95rem' }}>{desc}</p>
+            {/* If this is the Wahapedia API, show the attribution on a new line with specified color and bold site name */}
+            {title.includes('Wahapedia') && (
+                <div style={{ marginTop: 8, color: 'rgb(232, 193, 112)', fontSize: '0.9rem' }}>
+                    Данные предоставлены сервисом <a href="https://wahapedia.ru/" target="_blank" rel="noopener noreferrer" style={{ color: 'rgb(232, 193, 112)', textDecoration: 'none', fontWeight: 700 }}>Wahapedia</a>
+                </div>
+            )}
         </>
     );
     if (!available) {
@@ -59,7 +65,7 @@ const styles: Record<string, React.CSSProperties> = {
     container: { maxWidth: 900, margin: '60px auto', padding: '0 24px', textAlign: 'center' },
     title: { color: '#e8c170', fontSize: '2.2rem', marginBottom: '8px' },
     subtitle: { color: '#ccc', marginBottom: '40px', fontSize: '1.1rem' },
-    cards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px', textAlign: 'left' },
+    cards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px', textAlign: 'center' },
     card: {
         background: '#1a1a2e',
         border: '1px solid #8b0000',
@@ -68,6 +74,7 @@ const styles: Record<string, React.CSSProperties> = {
         textDecoration: 'none',
         display: 'block',
         transition: 'border-color 0.2s',
+        textAlign: 'center',
     },
     cardDisabled: {
         opacity: 0.6,
