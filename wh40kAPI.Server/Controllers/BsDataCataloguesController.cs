@@ -1,0 +1,29 @@
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using wh40kAPI.Server.Data;
+using wh40kAPI.Server.Models.BsData;
+
+namespace wh40kAPI.Server.Controllers;
+
+[ApiController]
+[Route("api/bsdata-catalogues")]
+public class BsDataCataloguesController(BsDataDbContext db) : ControllerBase
+{
+    [HttpGet]
+    public async Task<IEnumerable<BsDataCatalogue>> GetAll() =>
+        await db.Catalogues.AsNoTracking().OrderBy(c => c.Name).ToListAsync();
+
+    [HttpGet("{id}")]
+    public async Task<ActionResult<BsDataCatalogue>> GetById(string id)
+    {
+        var item = await db.Catalogues.FindAsync(id);
+        return item is null ? NotFound() : Ok(item);
+    }
+
+    [HttpGet("{id}/units")]
+    public async Task<IEnumerable<BsDataUnit>> GetUnits(string id) =>
+        await db.Units.AsNoTracking()
+            .Where(u => u.CatalogueId == id)
+            .OrderBy(u => u.Name)
+            .ToListAsync();
+}

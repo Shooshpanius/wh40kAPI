@@ -12,9 +12,9 @@ export function StartPage() {
                 />
                 <ApiCard
                     title="API BSData 40k"
-                    desc="Данные Warhammer 40,000 из репозитория BSData. В разработке."
+                    desc="Данные Warhammer 40,000 из репозитория BSData."
                     href="/bsdata-40k"
-                    available={false}
+                    available
                 />
                 <ApiCard
                     title="API BSData Kill Team"
