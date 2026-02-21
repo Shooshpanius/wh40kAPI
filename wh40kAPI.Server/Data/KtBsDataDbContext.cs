@@ -8,4 +8,17 @@ public class KtBsDataDbContext(DbContextOptions<KtBsDataDbContext> options) : Db
     public DbSet<KtBsDataCatalogue> Catalogues => Set<KtBsDataCatalogue>();
     public DbSet<KtBsDataUnit> Units => Set<KtBsDataUnit>();
     public DbSet<KtBsDataProfile> Profiles => Set<KtBsDataProfile>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        // Composite key: a profile is unique per unit + profile id + type name
+        modelBuilder.Entity<KtBsDataProfile>()
+            .HasKey(p => new { p.UnitId, p.Id, p.TypeName });
+
+        // Composite key: a unit is unique within a catalogue
+        modelBuilder.Entity<KtBsDataUnit>()
+            .HasKey(u => new { u.CatalogueId, u.Id });
+
+        base.OnModelCreating(modelBuilder);
+    }
 }
