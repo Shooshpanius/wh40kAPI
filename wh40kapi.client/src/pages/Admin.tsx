@@ -11,6 +11,12 @@ interface DbStatus {
     sources: number;
 }
 
+interface BsDataStatus {
+    catalogues: number;
+    units: number;
+    profiles: number;
+}
+
 export function Admin() {
     const [password, setPassword] = useState('');
     const [authenticated, setAuthenticated] = useState(false);
@@ -25,6 +31,11 @@ export function Admin() {
     const [status, setStatus] = useState<DbStatus | null>(null);
     const [statusLoading, setStatusLoading] = useState(false);
 
+    const [bsDataStatus, setBsDataStatus] = useState<BsDataStatus | null>(null);
+    const [bsDataImporting, setBsDataImporting] = useState(false);
+    const [bsDataMsg, setBsDataMsg] = useState('');
+    const [bsDataError, setBsDataError] = useState('');
+
     const handleLogin = async (e: React.FormEvent) => {
         e.preventDefault();
         setAuthLoading(true);
@@ -37,6 +48,7 @@ export function Admin() {
             if (res.ok) {
                 setAuthenticated(true);
                 loadStatus();
+                loadBsDataStatus();
             } else {
                 setAuthError('Invalid password. Please try again.');
             }
@@ -56,6 +68,17 @@ export function Admin() {
             if (res.ok) setStatus(await res.json());
         } finally {
             setStatusLoading(false);
+        }
+    };
+
+    const loadBsDataStatus = async () => {
+        try {
+            const res = await fetch('/api/bsdata-admin/status', {
+                headers: { 'X-Admin-Password': password },
+            });
+            if (res.ok) setBsDataStatus(await res.json());
+        } catch {
+            // ignore
         }
     };
 
@@ -84,6 +107,29 @@ export function Admin() {
             setUploadError('Upload error: ' + String(err));
         } finally {
             setUploading(false);
+        }
+    };
+
+    const handleBsDataImport = async () => {
+        setBsDataImporting(true);
+        setBsDataMsg('');
+        setBsDataError('');
+        try {
+            const res = await fetch('/api/bsdata-admin/import', {
+                method: 'POST',
+                headers: { 'X-Admin-Password': password },
+            });
+            const data = await res.json();
+            if (res.ok) {
+                setBsDataMsg(data.message ?? 'Import successful!');
+                loadBsDataStatus();
+            } else {
+                setBsDataError(data.title ?? data.message ?? 'Import failed.');
+            }
+        } catch (err) {
+            setBsDataError('Import error: ' + String(err));
+        } finally {
+            setBsDataImporting(false);
         }
     };
 
@@ -154,6 +200,33 @@ export function Admin() {
                 {uploadMsg && <p style={styles.success}>{uploadMsg}</p>}
                 {uploadError && <p style={styles.error}>{uploadError}</p>}
             </div>
+
+            <div style={styles.section}>
+                <h3 style={styles.sectionTitle}>BSData 40k Database</h3>
+                <p style={styles.hint}>
+                    Fetch and import data from the{' '}
+                    <a href="https://github.com/BSData/wh40k-10e" target="_blank" rel="noopener noreferrer" style={styles.link}>
+                        BSData/wh40k-10e
+                    </a>{' '}
+                    GitHub repository. This will replace all existing BSData records.
+                </p>
+                {bsDataStatus && (
+                    <div style={{ ...styles.statusGrid, marginBottom: 16 }}>
+                        <StatusCard label="Catalogues" value={bsDataStatus.catalogues} />
+                        <StatusCard label="Units" value={bsDataStatus.units} />
+                        <StatusCard label="Profiles" value={bsDataStatus.profiles} />
+                    </div>
+                )}
+                <button
+                    style={styles.btn}
+                    onClick={handleBsDataImport}
+                    disabled={bsDataImporting}
+                >
+                    {bsDataImporting ? 'Importing...' : '⬇ Получить данные wh40k-BSData'}
+                </button>
+                {bsDataMsg && <p style={styles.success}>{bsDataMsg}</p>}
+                {bsDataError && <p style={styles.error}>{bsDataError}</p>}
+            </div>
         </div>
     );
 }
@@ -189,4 +262,5 @@ const styles: Record<string, React.CSSProperties> = {
     success: { color: '#4caf50', marginTop: 8 },
     section: { background: '#1a1a2e', border: '1px solid #333', borderRadius: 8, padding: 24, marginBottom: 24 },
     statusGrid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(130px, 1fr))', gap: 12 },
+    link: { color: '#e8c170' },
 };
