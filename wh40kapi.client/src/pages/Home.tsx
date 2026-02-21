@@ -32,10 +32,12 @@ export function Home() {
 }
 
 function Card({ title, desc, href, external }: { title: string; desc: string; href: string; external?: boolean }) {
+    const isApiDocs = title === 'API Docs';
+    const cardStyle = isApiDocs ? { ...styles.card, ...styles.apiCard } : styles.card;
     return (
-        <a href={href} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined} style={styles.card}>
-            <h3 style={{ margin: 0, color: '#e8c170' }}>{title}</h3>
-            <p style={{ margin: '8px 0 0', color: '#aaa' }}>{desc}</p>
+        <a href={href} target={external ? '_blank' : undefined} rel={external ? 'noopener noreferrer' : undefined} style={cardStyle}>
+            <h3 style={{ margin: 0, color: '#e8c170', fontWeight: isApiDocs ? 700 : 400 }}>{title}</h3>
+            <p style={{ margin: '8px 0 0', color: '#aaa', fontWeight: isApiDocs ? 600 : 400 }}>{desc}</p>
         </a>
     );
 }
@@ -53,6 +55,9 @@ const styles: Record<string, React.CSSProperties> = {
         textDecoration: 'none',
         display: 'block',
         transition: 'border-color 0.2s',
+    },
+    apiCard: {
+        border: '2px solid #8b0000',
     },
     footer: { marginTop: 28, color: '#999', fontSize: '0.9rem', textAlign: 'center' },
     link: { color: '#e8c170', textDecoration: 'none' },
