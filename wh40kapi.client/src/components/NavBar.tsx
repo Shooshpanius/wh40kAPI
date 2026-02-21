@@ -5,13 +5,9 @@ export function NavBar() {
         <nav style={styles.nav}>
             <NavLink to="/" style={styles.brand} end>⚔️ WH40K API</NavLink>
             <div style={styles.links}>
-                <NavLink to="/wahapedia" style={navStyle}>Wahapedia</NavLink>
-                <NavLink to="/factions" style={navStyle}>Factions</NavLink>
-                <NavLink to="/datasheets" style={navStyle}>Datasheets</NavLink>
-                <NavLink to="/detachments" style={navStyle}>Detachments</NavLink>
-                <NavLink to="/stratagems" style={navStyle}>Stratagems</NavLink>
-                <NavLink to="/enhancements" style={navStyle}>Enhancements</NavLink>
-                <NavLink to="/admin" style={navStyle}>Admin</NavLink>
+                <NavLink to="/wahapedia" style={navStyle}>Wahapedia 40k</NavLink>
+                <NavLink to="/bsdata-40k" style={navStyle}>BSData 40k</NavLink>
+                <NavLink to="/bsdata-killteam" style={navStyle}>BSData Kill Team</NavLink>
             </div>
         </nav>
     );
