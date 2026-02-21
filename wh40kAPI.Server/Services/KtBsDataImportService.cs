@@ -170,50 +170,57 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
             ExtractEntry(entry, id, units, profiles, seenUnitIds);
         }
 
-        // Format B: units listed as root entryLinks, profiles stored in sharedSelectionEntries.
-        // Build a lookup of sharedSelectionEntries by id so we can resolve targetId references.
-        var sharedEntriesById = (root
-            .Element(Ns + "sharedSelectionEntries")
-            ?.Elements(Ns + "selectionEntry")
-            ?? Enumerable.Empty<XElement>())
+        // Format B: units listed as root entryLinks; the actual unit definition (with profiles)
+        // is the selectionEntry whose id equals the entryLink's targetId. Build a combined
+        // lookup covering both selectionEntries and sharedSelectionEntries so that either
+        // container can be the target.
+        var entriesById = (root
+                .Element(Ns + "selectionEntries")
+                ?.Elements(Ns + "selectionEntry")
+                ?? Enumerable.Empty<XElement>())
+            .Concat(root
+                .Element(Ns + "sharedSelectionEntries")
+                ?.Elements(Ns + "selectionEntry")
+                ?? Enumerable.Empty<XElement>())
             .Select(e => (Id: e.Attribute("id")?.Value, Entry: e))
             .Where(x => !string.IsNullOrEmpty(x.Id))
-            .ToDictionary(x => x.Id!, x => x.Entry);
+            .GroupBy(x => x.Id!)
+            .ToDictionary(g => g.Key, g => g.First().Entry);
 
         foreach (var link in root
             .Element(Ns + "entryLinks")
             ?.Elements(Ns + "entryLink") ?? Enumerable.Empty<XElement>())
         {
-            var linkId = link.Attribute("id")?.Value;
             var targetId = link.Attribute("targetId")?.Value;
-            if (string.IsNullOrEmpty(linkId) || string.IsNullOrEmpty(targetId)) continue;
-            if (!sharedEntriesById.TryGetValue(targetId, out var sharedEntry)) continue;
+            if (string.IsNullOrEmpty(targetId)) continue;
+            if (!entriesById.TryGetValue(targetId, out var linkedEntry)) continue;
 
             // Only process model-type entries (operatives), not weapons/upgrades
-            var entryType = sharedEntry.Attribute("type")?.Value;
+            var entryType = linkedEntry.Attribute("type")?.Value;
             if (entryType != "model") continue;
 
-            if (seenUnitIds.Contains(linkId)) continue;
-            seenUnitIds.Add(linkId);
+            // The unit's canonical id is the targetId (= linkedEntry.id)
+            if (seenUnitIds.Contains(targetId)) continue;
+            seenUnitIds.Add(targetId);
 
             var linkName = link.Attribute("name")?.Value;
             if (string.IsNullOrEmpty(linkName))
-                linkName = sharedEntry.Attribute("name")?.Value ?? "";
+                linkName = linkedEntry.Attribute("name")?.Value ?? "";
 
-            // Points: check link first, fall back to shared entry
-            var points = GetPoints(link) ?? GetPoints(sharedEntry);
+            // Points: check link first, fall back to linked entry
+            var points = GetPoints(link) ?? GetPoints(linkedEntry);
 
             units.Add(new KtBsDataUnit
             {
-                Id = linkId,
+                Id = targetId,
                 CatalogueId = id,
                 Name = linkName,
                 EntryType = entryType,
                 Points = points,
             });
 
-            // Profiles come from the shared entry; UnitId is the link's id
-            ExtractProfiles(sharedEntry, linkId, profiles);
+            // Profiles come from the linked entry; UnitId is the targetId
+            ExtractProfiles(linkedEntry, targetId, profiles);
         }
 
         return (catalogue, units, profiles);
