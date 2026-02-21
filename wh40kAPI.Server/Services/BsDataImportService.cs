@@ -26,6 +26,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         await db.Catalogues.ExecuteDeleteAsync();
 
         int totalUnits = 0;
+        int totalProfiles = 0;
 
         // Keep global seen sets to avoid adding entities with duplicate primary keys
         var seenCatalogueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -77,23 +78,23 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 }
 
                 if (newUnits.Count > 0)
-                {
                     db.Units.AddRange(newUnits);
-                    totalUnits += newUnits.Count;
-                }
 
                 if (newProfiles.Count > 0)
-                {
                     db.Profiles.AddRange(newProfiles);
-                }
+
+                await db.SaveChangesAsync();
+                totalUnits += newUnits.Count;
+                totalProfiles += newProfiles.Count;
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to import {File}", fileName);
+                db.ChangeTracker.Clear();
             }
         }
 
-        await db.SaveChangesAsync();
+        logger.LogInformation("Import complete. Units: {TotalUnits}, Profiles: {TotalProfiles}", totalUnits, totalProfiles);
         return totalUnits;
     }
 

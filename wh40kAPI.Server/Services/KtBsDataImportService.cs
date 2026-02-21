@@ -87,24 +87,22 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
                 }
 
                 if (newUnits.Count > 0)
-                {
                     db.Units.AddRange(newUnits);
-                    totalUnits += newUnits.Count;
-                }
 
                 if (newProfiles.Count > 0)
-                {
                     db.Profiles.AddRange(newProfiles);
-                    totalProfiles += newProfiles.Count;
-                }
+
+                await db.SaveChangesAsync();
+                totalUnits += newUnits.Count;
+                totalProfiles += newProfiles.Count;
             }
             catch (Exception ex)
             {
                 logger.LogWarning(ex, "Failed to import {File}", fileName);
+                db.ChangeTracker.Clear();
             }
         }
 
-        await db.SaveChangesAsync();
         logger.LogInformation("Import complete. Units: {TotalUnits}, Profiles: {TotalProfiles}", totalUnits, totalProfiles);
         return totalUnits;
     }
