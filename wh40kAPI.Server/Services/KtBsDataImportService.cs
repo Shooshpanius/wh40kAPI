@@ -162,16 +162,74 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
         var profiles = new List<KtBsDataProfile>();
         var seenUnitIds = new HashSet<string>();
 
-        // Parse sharedSelectionEntries (top-level reusable units)
+        // Format A: units defined directly in root selectionEntries with embedded profiles
         foreach (var entry in root
-            .Element(Ns + "sharedSelectionEntries")
+            .Element(Ns + "selectionEntries")
             ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
             ExtractEntry(entry, id, units, profiles, seenUnitIds);
         }
 
+        // Format B: units listed as root entryLinks, profiles stored in sharedSelectionEntries.
+        // Build a lookup of sharedSelectionEntries by id so we can resolve targetId references.
+        var sharedEntriesById = (root
+            .Element(Ns + "sharedSelectionEntries")
+            ?.Elements(Ns + "selectionEntry")
+            ?? Enumerable.Empty<XElement>())
+            .Select(e => (Id: e.Attribute("id")?.Value, Entry: e))
+            .Where(x => !string.IsNullOrEmpty(x.Id))
+            .ToDictionary(x => x.Id!, x => x.Entry);
+
+        foreach (var link in root
+            .Element(Ns + "entryLinks")
+            ?.Elements(Ns + "entryLink") ?? Enumerable.Empty<XElement>())
+        {
+            var linkId = link.Attribute("id")?.Value;
+            var targetId = link.Attribute("targetId")?.Value;
+            if (string.IsNullOrEmpty(linkId) || string.IsNullOrEmpty(targetId)) continue;
+            if (!sharedEntriesById.TryGetValue(targetId, out var sharedEntry)) continue;
+
+            // Only process model-type entries (operatives), not weapons/upgrades
+            var entryType = sharedEntry.Attribute("type")?.Value;
+            if (entryType != "model") continue;
+
+            if (seenUnitIds.Contains(linkId)) continue;
+            seenUnitIds.Add(linkId);
+
+            var linkName = link.Attribute("name")?.Value;
+            if (string.IsNullOrEmpty(linkName))
+                linkName = sharedEntry.Attribute("name")?.Value ?? "";
+
+            // Points: check link first, fall back to shared entry
+            var points = GetPoints(link) ?? GetPoints(sharedEntry);
+
+            units.Add(new KtBsDataUnit
+            {
+                Id = linkId,
+                CatalogueId = id,
+                Name = linkName,
+                EntryType = entryType,
+                Points = points,
+            });
+
+            // Profiles come from the shared entry; UnitId is the link's id
+            ExtractProfiles(sharedEntry, linkId, profiles);
+        }
+
         return (catalogue, units, profiles);
     }
+
+    private static string? GetPoints(XElement entry) =>
+        entry.Element(Ns + "costs")
+            ?.Elements(Ns + "cost")
+            .Where(c =>
+            {
+                var costName = c.Attribute("name")?.Value ?? "";
+                return costName.Contains("pts", StringComparison.OrdinalIgnoreCase)
+                    || costName.Contains("ep", StringComparison.OrdinalIgnoreCase);
+            })
+            .Select(c => c.Attribute("value")?.Value)
+            .FirstOrDefault();
 
     private static void ExtractEntry(
         XElement entry,
@@ -187,24 +245,20 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
         var unitName = entry.Attribute("name")?.Value ?? "";
         var entryType = entry.Attribute("type")?.Value;
 
-        // Get points cost
-        var points = entry
-            .Element(Ns + "costs")
-            ?.Elements(Ns + "cost")
-            .Where(c => (c.Attribute("name")?.Value ?? "").Contains("pts", StringComparison.OrdinalIgnoreCase))
-            .Select(c => c.Attribute("value")?.Value)
-            .FirstOrDefault();
-
         units.Add(new KtBsDataUnit
         {
             Id = unitId,
             CatalogueId = catalogueId,
             Name = unitName,
             EntryType = entryType,
-            Points = points,
+            Points = GetPoints(entry),
         });
 
-        // Extract profiles
+        ExtractProfiles(entry, unitId, profiles);
+    }
+
+    private static void ExtractProfiles(XElement entry, string unitId, List<KtBsDataProfile> profiles)
+    {
         foreach (var profile in entry
             .Element(Ns + "profiles")
             ?.Elements(Ns + "profile") ?? Enumerable.Empty<XElement>())
