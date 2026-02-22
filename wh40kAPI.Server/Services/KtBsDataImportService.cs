@@ -163,18 +163,8 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
         var profiles = new List<KtBsDataProfile>();
         var seenUnitIds = new HashSet<string>();
 
-        // Format A: units defined directly in root selectionEntries with embedded profiles
-        foreach (var entry in root
-            .Element(Ns + "selectionEntries")
-            ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
-        {
-            ExtractEntry(entry, id, units, profiles, seenUnitIds);
-        }
-
-        // Format B: units listed as root entryLinks; the actual unit definition (with profiles)
-        // is the selectionEntry whose id equals the entryLink's targetId. Build a combined
-        // lookup covering both selectionEntries and sharedSelectionEntries so that either
-        // container can be the target.
+        // Build a combined lookup of all selection entries so entryLinks within model
+        // entries (standard weapons) can be resolved.
         var entriesById = (root
                 .Element(Ns + "selectionEntries")
                 ?.Elements(Ns + "selectionEntry")
@@ -188,6 +178,16 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
             .GroupBy(x => x.Id!)
             .ToDictionary(g => g.Key, g => g.First().Entry);
 
+        // Format A: units defined directly in root selectionEntries with embedded profiles
+        foreach (var entry in root
+            .Element(Ns + "selectionEntries")
+            ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
+        {
+            ExtractEntry(entry, id, units, profiles, seenUnitIds, entriesById);
+        }
+
+        // Format B: units listed as root entryLinks; the actual unit definition (with profiles)
+        // is the selectionEntry whose id equals the entryLink's targetId.
         foreach (var link in root
             .Element(Ns + "entryLinks")
             ?.Elements(Ns + "entryLink") ?? Enumerable.Empty<XElement>())
@@ -218,10 +218,13 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
                 Name = linkName,
                 EntryType = entryType,
                 Points = points,
+                MinCount = GetMinCount(linkedEntry),
+                MaxCount = GetMaxCount(linkedEntry),
+                Categories = GetCategories(linkedEntry),
             });
 
             // Profiles come from the linked entry; UnitId is the targetId
-            ExtractProfiles(linkedEntry, targetId, profiles);
+            ExtractProfiles(linkedEntry, targetId, profiles, entriesById);
         }
 
         return (catalogue, units, profiles);
@@ -239,12 +242,68 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
             .Select(c => c.Attribute("value")?.Value)
             .FirstOrDefault();
 
+    /// <summary>
+    /// Returns the minimum selection count from constraints with field="selections".
+    /// </summary>
+    private static int? GetMinCount(XElement entry)
+    {
+        var value = entry.Element(Ns + "constraints")
+            ?.Elements(Ns + "constraint")
+            .Where(c => c.Attribute("field")?.Value == "selections"
+                     && c.Attribute("type")?.Value == "min")
+            .Select(c => c.Attribute("value")?.Value)
+            .FirstOrDefault();
+        return int.TryParse(value, out var minCount) ? minCount : null;
+    }
+
+    /// <summary>
+    /// Returns the maximum selection count from constraints with field="selections".
+    /// Also falls back to conditions with type="instanceOf" and field="selections".
+    /// </summary>
+    private static int? GetMaxCount(XElement entry)
+    {
+        var value = entry.Element(Ns + "constraints")
+            ?.Elements(Ns + "constraint")
+            .Where(c => c.Attribute("field")?.Value == "selections"
+                     && c.Attribute("type")?.Value == "max")
+            .Select(c => c.Attribute("value")?.Value)
+            .FirstOrDefault();
+        if (int.TryParse(value, out var maxCount)) return maxCount;
+
+        // Fallback: condition type="instanceOf" field="selections"
+        value = entry.Element(Ns + "conditions")
+            ?.Elements(Ns + "condition")
+            .Where(c => c.Attribute("type")?.Value == "instanceOf"
+                     && c.Attribute("field")?.Value == "selections")
+            .Select(c => c.Attribute("value")?.Value)
+            .FirstOrDefault();
+        return int.TryParse(value, out maxCount) ? maxCount : null;
+    }
+
+    /// <summary>
+    /// Returns a JSON array of category targetIds from categoryLinks.
+    /// </summary>
+    private static string? GetCategories(XElement entry)
+    {
+        var categoryIds = entry
+            .Element(Ns + "categoryLinks")
+            ?.Elements(Ns + "categoryLink")
+            .Select(c => c.Attribute("targetId")?.Value)
+            .Where(tid => !string.IsNullOrEmpty(tid))
+            .ToList();
+
+        return categoryIds is { Count: > 0 }
+            ? JsonSerializer.Serialize(categoryIds)
+            : null;
+    }
+
     private static void ExtractEntry(
         XElement entry,
         string catalogueId,
         List<KtBsDataUnit> units,
         List<KtBsDataProfile> profiles,
-        HashSet<string> seenUnitIds)
+        HashSet<string> seenUnitIds,
+        IReadOnlyDictionary<string, XElement> entriesById)
     {
         var unitId = entry.Attribute("id")?.Value ?? "";
         if (string.IsNullOrEmpty(unitId) || seenUnitIds.Contains(unitId)) return;
@@ -260,12 +319,19 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
             Name = unitName,
             EntryType = entryType,
             Points = GetPoints(entry),
+            MinCount = GetMinCount(entry),
+            MaxCount = GetMaxCount(entry),
+            Categories = GetCategories(entry),
         });
 
-        ExtractProfiles(entry, unitId, profiles);
+        ExtractProfiles(entry, unitId, profiles, entriesById);
     }
 
-    private static void ExtractProfiles(XElement entry, string unitId, List<KtBsDataProfile> profiles)
+    private static void ExtractProfiles(
+        XElement entry,
+        string unitId,
+        List<KtBsDataProfile> profiles,
+        IReadOnlyDictionary<string, XElement> entriesById)
     {
         foreach (var profile in entry
             .Element(Ns + "profiles")
@@ -296,20 +362,31 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
             });
         }
 
-        // Recurse into nested selectionEntries (e.g., weapon profiles with typeName="Weapons")
+        // Follow entryLinks to extract standard weapon profiles from shared entries.
+        foreach (var link in entry
+            .Element(Ns + "entryLinks")
+            ?.Elements(Ns + "entryLink") ?? Enumerable.Empty<XElement>())
+        {
+            var targetId = link.Attribute("targetId")?.Value;
+            if (string.IsNullOrEmpty(targetId)) continue;
+            if (!entriesById.TryGetValue(targetId, out var linkedEntry)) continue;
+            ExtractProfiles(linkedEntry, unitId, profiles, entriesById);
+        }
+
+        // Recurse into nested selectionEntries (e.g., special upgrade weapons).
         foreach (var nested in entry
             .Element(Ns + "selectionEntries")
             ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
-            ExtractProfiles(nested, unitId, profiles);
+            ExtractProfiles(nested, unitId, profiles, entriesById);
         }
 
-        // Recurse into selectionEntryGroups (e.g., grouped weapon options)
+        // Recurse into selectionEntryGroups (e.g., grouped weapon options).
         foreach (var group in entry
             .Element(Ns + "selectionEntryGroups")
             ?.Elements(Ns + "selectionEntryGroup") ?? Enumerable.Empty<XElement>())
         {
-            ExtractProfiles(group, unitId, profiles);
+            ExtractProfiles(group, unitId, profiles, entriesById);
         }
     }
 

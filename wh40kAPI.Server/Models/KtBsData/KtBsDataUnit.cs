@@ -10,4 +10,10 @@ public class KtBsDataUnit
     public string Name { get; set; } = string.Empty;
     public string? EntryType { get; set; }
     public string? Points { get; set; }
+    /// <summary>Minimum number of this operative that can be selected.</summary>
+    public int? MinCount { get; set; }
+    /// <summary>Maximum number of this operative that can be selected.</summary>
+    public int? MaxCount { get; set; }
+    /// <summary>JSON array of category targetIds (archetypes) this operative belongs to.</summary>
+    public string? Categories { get; set; }
 }
