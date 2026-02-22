@@ -15,13 +15,24 @@ interface Unit {
     points: string | null;
 }
 
+interface Profile {
+    id: string;
+    unitId: string;
+    name: string;
+    typeName: string;
+    characteristics: string | null;
+}
+
 export function BSData40k() {
     const navigate = useNavigate();
     const [catalogues, setCatalogues] = useState<Catalogue[]>([]);
     const [selectedCatalogue, setSelectedCatalogue] = useState<Catalogue | null>(null);
     const [units, setUnits] = useState<Unit[]>([]);
+    const [selectedUnit, setSelectedUnit] = useState<Unit | null>(null);
+    const [profiles, setProfiles] = useState<Profile[]>([]);
     const [loading, setLoading] = useState(true);
     const [unitsLoading, setUnitsLoading] = useState(false);
+    const [profilesLoading, setProfilesLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
@@ -34,12 +45,24 @@ export function BSData40k() {
 
     const loadUnits = (catalogue: Catalogue) => {
         setSelectedCatalogue(catalogue);
+        setSelectedUnit(null);
+        setProfiles([]);
         setUnitsLoading(true);
         fetch(`/api/bsdata-catalogues/${encodeURIComponent(catalogue.id)}/units`)
             .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(`${r.status} ${r.statusText}: ${t}`)))
             .then(setUnits)
             .catch(() => setUnits([]))
             .finally(() => setUnitsLoading(false));
+    };
+
+    const loadProfiles = (unit: Unit) => {
+        setSelectedUnit(unit);
+        setProfilesLoading(true);
+        fetch(`/api/bsdata-units/${encodeURIComponent(unit.id)}/profiles`)
+            .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(`${r.status} ${r.statusText}: ${t}`)))
+            .then(setProfiles)
+            .catch(() => setProfiles([]))
+            .finally(() => setProfilesLoading(false));
     };
 
     if (loading) {
@@ -73,6 +96,10 @@ export function BSData40k() {
         );
     }
 
+    const unitProfiles = profiles.filter(p => p.typeName === 'Unit');
+    const abilityProfiles = profiles.filter(p => p.typeName === 'Abilities');
+    const otherProfiles = profiles.filter(p => p.typeName !== 'Unit' && p.typeName !== 'Abilities');
+
     return (
         <div style={styles.page}>
             <div style={styles.header}>
@@ -90,6 +117,7 @@ export function BSData40k() {
             </p>
 
             <div style={styles.layout}>
+                {/* Left panel: catalogues */}
                 <div style={styles.catalogueList}>
                     <h3 style={styles.sectionTitle}>Каталоги (Фракции)</h3>
                     {catalogues.map(c => (
@@ -110,6 +138,7 @@ export function BSData40k() {
                     ))}
                 </div>
 
+                {/* Middle panel: units list */}
                 <div style={styles.unitPanel}>
                     {!selectedCatalogue && (
                         <p style={styles.hint}>← Выберите каталог для просмотра юнитов</p>
@@ -125,14 +154,22 @@ export function BSData40k() {
                                 <table style={styles.table}>
                                     <thead>
                                         <tr>
-                                            <Th>Name</Th>
-                                            <Th>Type</Th>
+                                            <Th>Юнит</Th>
+                                            <Th>Тип</Th>
                                             <Th>Pts</Th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {units.map(u => (
-                                            <tr key={u.id} style={styles.row}>
+                                            <tr
+                                                key={u.id}
+                                                style={{
+                                                    ...styles.row,
+                                                    ...(selectedUnit?.id === u.id ? styles.rowActive : {}),
+                                                    cursor: 'pointer',
+                                                }}
+                                                onClick={() => loadProfiles(u)}
+                                            >
                                                 <Td>{u.name}</Td>
                                                 <Td>{u.entryType ?? '—'}</Td>
                                                 <Td>{u.points ?? '—'}</Td>
@@ -144,9 +181,100 @@ export function BSData40k() {
                         </>
                     )}
                 </div>
+
+                {/* Right panel: unit profile details */}
+                {selectedUnit && (
+                    <div style={styles.profilePanel}>
+                        <h3 style={{ ...styles.sectionTitle, borderBottom: '1px solid #333', paddingBottom: 8 }}>
+                            {selectedUnit.name}
+                        </h3>
+                        {profilesLoading && <p style={styles.hint}>Loading...</p>}
+                        {!profilesLoading && profiles.length === 0 && (
+                            <p style={styles.hint}>Профили не найдены.</p>
+                        )}
+
+                        {/* Unit stats */}
+                        {unitProfiles.map(p => {
+                            const stats = p.characteristics ? tryParseJson(p.characteristics) : null;
+                            return (
+                                <div key={p.id} style={styles.statBlock}>
+                                    <div style={styles.statBlockTitle}>⚙ Unit</div>
+                                    {stats && (
+                                        <div style={styles.statsGrid}>
+                                            {Object.entries(stats).map(([k, v]) => (
+                                                <div key={k} style={styles.statCell}>
+                                                    <div style={styles.statLabel}>{k}</div>
+                                                    <div style={styles.statValue}>{String(v)}</div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+
+                        {/* Other profiles grouped by typeName (weapons, abilities, etc.) */}
+                        {Object.entries(
+                            otherProfiles.reduce<Record<string, Profile[]>>((acc, p) => {
+                                (acc[p.typeName] ??= []).push(p);
+                                return acc;
+                            }, {})
+                        ).map(([typeName, typeProfiles]) => (
+                            <div key={typeName} style={{ marginTop: 12 }}>
+                                <div style={styles.profileGroupTitle}>{typeName}</div>
+                                <table style={styles.table}>
+                                    <thead>
+                                        <tr>
+                                            <Th>Название</Th>
+                                            <Th>Параметры</Th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {typeProfiles.map(p => {
+                                            const stats = p.characteristics ? tryParseJson(p.characteristics) : null;
+                                            const parts = stats
+                                                ? Object.entries(stats).map(([k, v]) => `${k}: ${v}`)
+                                                : [];
+                                            const summary = parts.length > 0
+                                                ? parts.slice(0, 6).join(' | ') + (parts.length > 6 ? ' …' : '')
+                                                : '—';
+                                            return (
+                                                <tr key={p.id} style={styles.row}>
+                                                    <Td>{p.name}</Td>
+                                                    <Td><span style={{ fontSize: '0.8rem' }}>{summary}</span></Td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        ))}
+
+                        {/* Abilities */}
+                        {abilityProfiles.length > 0 && (
+                            <div style={{ marginTop: 12 }}>
+                                <div style={styles.profileGroupTitle}>Abilities</div>
+                                {abilityProfiles.map(p => {
+                                    const stats = p.characteristics ? tryParseJson(p.characteristics) : null;
+                                    const abilityText = stats ? Object.values(stats).join(' ') : '';
+                                    return (
+                                        <div key={p.id} style={styles.abilityBlock}>
+                                            <div style={styles.abilityName}>{p.name}</div>
+                                            {abilityText && <div style={styles.abilityText}>{abilityText}</div>}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        )}
+                    </div>
+                )}
             </div>
         </div>
     );
+}
+
+function tryParseJson(s: string): Record<string, unknown> | null {
+    try { return JSON.parse(s); } catch (e) { console.warn('Failed to parse characteristics JSON:', e); return null; }
 }
 
 function Th({ children }: { children: React.ReactNode }) {
@@ -160,7 +288,7 @@ const thStyle: React.CSSProperties = { padding: '8px 12px', background: '#8b0000
 const tdStyle: React.CSSProperties = { padding: '6px 12px', color: '#ccc', borderBottom: '1px solid #333' };
 
 const styles: Record<string, React.CSSProperties> = {
-    page: { maxWidth: 1100, margin: '32px auto', padding: '0 24px' },
+    page: { maxWidth: 1300, margin: '32px auto', padding: '0 24px' },
     container: { maxWidth: 600, margin: '80px auto', padding: '0 24px', textAlign: 'center' },
     header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 12 },
     icon: { fontSize: '4rem', marginBottom: '16px' },
@@ -203,7 +331,7 @@ const styles: Record<string, React.CSSProperties> = {
         cursor: 'pointer',
     },
     layout: { display: 'flex', gap: 24, alignItems: 'flex-start', flexWrap: 'wrap' },
-    catalogueList: { width: 260, flexShrink: 0, maxHeight: '70vh', overflowY: 'auto' },
+    catalogueList: { width: 220, flexShrink: 0, maxHeight: '80vh', overflowY: 'auto' },
     catalogueItem: {
         background: '#1a1a2e',
         border: '1px solid #333',
@@ -213,7 +341,19 @@ const styles: Record<string, React.CSSProperties> = {
         cursor: 'pointer',
     },
     catalogueItemActive: { border: '1px solid #8b0000' },
-    unitPanel: { flex: 1, minWidth: 0 },
+    unitPanel: { width: 260, flexShrink: 0 },
+    profilePanel: { flex: 1, minWidth: 0, background: '#12122a', border: '1px solid #333', borderRadius: 8, padding: '16px 20px' },
     table: { width: '100%', borderCollapse: 'collapse', background: '#1a1a2e' },
     row: {},
+    rowActive: { background: '#2a1a1a' },
+    statBlock: { background: '#1a1a2e', border: '1px solid #8b0000', borderRadius: 6, padding: 12, marginBottom: 12 },
+    statBlockTitle: { color: '#e8c170', fontWeight: 700, fontSize: '0.85rem', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 1 },
+    statsGrid: { display: 'flex', flexWrap: 'wrap', gap: 8 },
+    statCell: { background: '#0b0b1a', border: '1px solid #444', borderRadius: 4, padding: '4px 8px', textAlign: 'center', minWidth: 52 },
+    statLabel: { color: '#888', fontSize: '0.7rem', textTransform: 'uppercase', marginBottom: 2 },
+    statValue: { color: '#e8c170', fontWeight: 700, fontSize: '1rem' },
+    profileGroupTitle: { color: '#aaa', fontSize: '0.8rem', textTransform: 'uppercase', letterSpacing: 1, marginBottom: 6 },
+    abilityBlock: { background: '#1a1a2e', border: '1px solid #333', borderRadius: 4, padding: '8px 12px', marginBottom: 6 },
+    abilityName: { color: '#e8c170', fontWeight: 600, fontSize: '0.9rem', marginBottom: 4 },
+    abilityText: { color: '#bbb', fontSize: '0.82rem', lineHeight: 1.5 },
 };
