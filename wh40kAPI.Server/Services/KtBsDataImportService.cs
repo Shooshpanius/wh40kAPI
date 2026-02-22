@@ -295,6 +295,22 @@ public class KtBsDataImportService(KtBsDataDbContext db, IHttpClientFactory http
                     : null,
             });
         }
+
+        // Recurse into nested selectionEntries (e.g., weapon profiles with typeName="Weapons")
+        foreach (var nested in entry
+            .Element(Ns + "selectionEntries")
+            ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
+        {
+            ExtractProfiles(nested, unitId, profiles);
+        }
+
+        // Recurse into selectionEntryGroups (e.g., grouped weapon options)
+        foreach (var group in entry
+            .Element(Ns + "selectionEntryGroups")
+            ?.Elements(Ns + "selectionEntryGroup") ?? Enumerable.Empty<XElement>())
+        {
+            ExtractProfiles(group, unitId, profiles);
+        }
     }
 
 }
