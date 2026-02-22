@@ -1,4 +1,15 @@
+import { useEffect, useState } from 'react';
+
 export function StartPage() {
+    const [killTeamAvailable, setKillTeamAvailable] = useState(false);
+
+    useEffect(() => {
+        fetch('/api/ktbsdata-catalogues')
+            .then(r => r.ok ? r.json() : Promise.reject(new Error(`${r.status} ${r.statusText}`)))
+            .then((data: unknown) => setKillTeamAvailable(Array.isArray(data) && data.length > 0))
+            .catch((e: unknown) => { console.error('Failed to fetch Kill Team catalogues:', e); setKillTeamAvailable(false); });
+    }, []);
+
     return (
         <div style={styles.container}>
             <h1 style={styles.title}>⚔️ Warhammer 40,000 API Hub</h1>
@@ -18,9 +29,9 @@ export function StartPage() {
                 />
                 <ApiCard
                     title="API BSData Kill Team"
-                    desc="Данные Kill Team из репозитория BSData. В разработке."
+                    desc="Данные Kill Team из репозитория BSData."
                     href="/bsdata-killteam"
-                    available={false}
+                    available={killTeamAvailable}
                 />
             </div>
 
