@@ -1,6 +1,9 @@
 ﻿FROM node:20-alpine AS build
 WORKDIR /app
 COPY package*.json ./
+
+RUN rm -rf node_modules package-lock.json
+RUN npm cache clean --force
 RUN npm install
 COPY . .
 RUN npm run build
