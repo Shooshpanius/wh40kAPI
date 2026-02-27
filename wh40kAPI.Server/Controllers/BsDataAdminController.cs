@@ -8,7 +8,7 @@ namespace wh40kAPI.Server.Controllers;
 
 [ApiController]
 [ApiExplorerSettings(IgnoreApi = true)]
-[Route("api/bsdata-admin")]
+[Route("api/bsdata/admin")]
 public class BsDataAdminController(BsDataDbContext db, BsDataImportService importService) : ControllerBase
 {
     /// <summary>

@@ -6,7 +6,7 @@ using wh40kAPI.Server.Models.BsData;
 namespace wh40kAPI.Server.Controllers;
 
 [ApiController]
-[Route("api/bsdata-catalogues")]
+[Route("api/bsdata/catalogues")]
 public class BsDataCataloguesController(BsDataDbContext db) : ControllerBase
 {
     [HttpGet]

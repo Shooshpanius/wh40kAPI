@@ -16,7 +16,7 @@ export function Stratagems() {
     const [search, setSearch] = useState('');
 
     useEffect(() => {
-        fetch('/api/strategems')
+        fetch('/api/wh40k/strategems')
             .then(r => r.ok ? r.json() : Promise.reject('Failed to load'))
             .then(setItems)
             .catch(e => setError(String(e)))

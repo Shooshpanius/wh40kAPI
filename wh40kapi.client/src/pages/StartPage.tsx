@@ -4,7 +4,7 @@ export function StartPage() {
     const [killTeamAvailable, setKillTeamAvailable] = useState(false);
 
     useEffect(() => {
-        fetch('/api/ktbsdata-catalogues')
+        fetch('/api/ktbsdata/catalogues')
             .then(r => r.ok ? r.json() : Promise.reject(new Error(`${r.status} ${r.statusText}`)))
             .then((data: unknown) => setKillTeamAvailable(Array.isArray(data) && data.length > 0))
             .catch((e: unknown) => { console.error('Failed to fetch Kill Team catalogues:', e); setKillTeamAvailable(false); });
