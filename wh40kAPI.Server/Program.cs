@@ -72,7 +72,18 @@ builder.Services.AddHttpClient("github", client =>
     client.Timeout = TimeSpan.FromMinutes(10);
 });
 builder.Services.AddControllers();
-builder.Services.AddOpenApi();
+builder.Services.AddOpenApi("wh40k", options =>
+{
+    options.ShouldInclude = (desc) => desc.GroupName == "wh40k";
+});
+builder.Services.AddOpenApi("bsdata", options =>
+{
+    options.ShouldInclude = (desc) => desc.GroupName == "bsdata";
+});
+builder.Services.AddOpenApi("ktbsdata", options =>
+{
+    options.ShouldInclude = (desc) => desc.GroupName == "ktbsdata";
+});
 
 var app = builder.Build();
 
@@ -95,8 +106,12 @@ app.MapStaticAssets();
 // Configure the HTTP request pipeline.
 //if (app.Environment.IsDevelopment())
 //{
-    app.MapOpenApi();
-    app.MapScalarApiReference();
+    app.MapOpenApi("wh40k");
+    app.MapOpenApi("bsdata");
+    app.MapOpenApi("ktbsdata");
+    app.MapScalarApiReference("/scalar/wh40k", options => options.AddDocument("wh40k", "WH40K API"));
+    app.MapScalarApiReference("/scalar/bsdata", options => options.AddDocument("bsdata", "BSData 40k"));
+    app.MapScalarApiReference("/scalar/ktbsdata", options => options.AddDocument("ktbsdata", "BSData Kill Team"));
 //}
 
 app.UseAuthorization();

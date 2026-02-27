@@ -5,7 +5,10 @@ A Warhammer 40,000 10th Edition API with a React frontend.
 ## Features
 
 - **REST API** for all WH40K data: Factions, Datasheets, Abilities, Detachments, Stratagems, Enhancements, Sources
-- **Swagger UI** via Scalar at `/scalar/v1` (development mode)
+- **Swagger UI** via Scalar — three separate API docs:
+  - WH40K API: `/scalar/wh40k`
+  - BSData 40k: `/scalar/bsdata`
+  - BSData Kill Team: `/scalar/ktbsdata`
 - **Admin panel** (frontend at `/admin`) for uploading `Data.rar` to populate the database
 - **MariaDB database** (schema auto-created on first run via EF Core `EnsureCreated`)
 

@@ -6,6 +6,7 @@ using wh40kAPI.Server.Models;
 namespace wh40kAPI.Server.Controllers;
 
 [ApiController]
+[ApiExplorerSettings(GroupName = "wh40k")]
 [Route("api/wh40k/[controller]")]
 public class StrategemsController(AppDbContext db) : ControllerBase
 {
