@@ -65,17 +65,41 @@ echo -n "your_password" | sha256sum
 
 ## API Endpoints
 
+### WH40K API (`/api/wh40k/`)
+
 | Endpoint | Description |
 |---|---|
-| `GET /api/factions` | All factions |
-| `GET /api/datasheets?factionId=SM` | Datasheets (filter by faction) |
-| `GET /api/datasheets/{id}/models` | Models for a datasheet |
-| `GET /api/datasheets/{id}/wargear` | Wargear for a datasheet |
-| `GET /api/abilities?factionId=SM` | Abilities |
-| `GET /api/detachments?factionId=SM` | Detachments |
-| `GET /api/strategems?factionId=SM` | Stratagems |
-| `GET /api/enhancements?factionId=SM` | Enhancements |
-| `GET /api/source` | Source books |
-| `POST /api/admin/upload` | Upload Data.rar (requires X-Admin-Password header) |
-| `GET /api/admin/status` | Database status (requires X-Admin-Password header) |
+| `GET /api/wh40k/factions` | All factions |
+| `GET /api/wh40k/datasheets?factionId=SM` | Datasheets (filter by faction) |
+| `GET /api/wh40k/datasheets/{id}/models` | Models for a datasheet |
+| `GET /api/wh40k/datasheets/{id}/wargear` | Wargear for a datasheet |
+| `GET /api/wh40k/abilities?factionId=SM` | Abilities |
+| `GET /api/wh40k/detachments?factionId=SM` | Detachments |
+| `GET /api/wh40k/strategems?factionId=SM` | Stratagems |
+| `GET /api/wh40k/enhancements?factionId=SM` | Enhancements |
+| `GET /api/wh40k/source` | Source books |
+| `POST /api/wh40k/admin/upload` | Upload Data.rar (requires X-Admin-Password header) |
+| `GET /api/wh40k/admin/status` | Database status (requires X-Admin-Password header) |
+
+### BSData WH40K API (`/api/bsdata/`)
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/bsdata/catalogues` | All catalogues |
+| `GET /api/bsdata/catalogues/{id}/units` | Units for a catalogue |
+| `GET /api/bsdata/units` | All units (filter by `catalogueId`) |
+| `GET /api/bsdata/units/{id}/profiles` | Profiles for a unit |
+| `POST /api/bsdata/admin/import` | Import from BSData/wh40k-10e (requires X-Admin-Password header) |
+| `GET /api/bsdata/admin/status` | BSData database status (requires X-Admin-Password header) |
+
+### BSData Kill Team API (`/api/ktbsdata/`)
+
+| Endpoint | Description |
+|---|---|
+| `GET /api/ktbsdata/catalogues` | All Kill Team catalogues |
+| `GET /api/ktbsdata/catalogues/{id}/units` | Units for a catalogue |
+| `GET /api/ktbsdata/units` | All units (filter by `catalogueId`) |
+| `GET /api/ktbsdata/units/{id}/profiles` | Profiles for a unit |
+| `POST /api/ktbsdata/admin/import` | Import from BSData/wh40k-killteam (requires X-Admin-Password header) |
+| `GET /api/ktbsdata/admin/status` | Kill Team BSData database status (requires X-Admin-Password header) |
 

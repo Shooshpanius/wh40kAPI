@@ -46,7 +46,7 @@ export function Admin() {
         setAuthLoading(true);
         setAuthError('');
         try {
-            const res = await fetch('/api/admin/verify', {
+            const res = await fetch('/api/wh40k/admin/verify', {
                 method: 'POST',
                 headers: { 'X-Admin-Password': password },
             });
@@ -68,7 +68,7 @@ export function Admin() {
     const loadStatus = async () => {
         setStatusLoading(true);
         try {
-            const res = await fetch('/api/admin/status', {
+            const res = await fetch('/api/wh40k/admin/status', {
                 headers: { 'X-Admin-Password': password },
             });
             if (res.ok) setStatus(await res.json());
@@ -79,7 +79,7 @@ export function Admin() {
 
     const loadBsDataStatus = async () => {
         try {
-            const res = await fetch('/api/bsdata-admin/status', {
+            const res = await fetch('/api/bsdata/admin/status', {
                 headers: { 'X-Admin-Password': password },
             });
             if (res.ok) setBsDataStatus(await res.json());
@@ -90,7 +90,7 @@ export function Admin() {
 
     const loadKtBsDataStatus = async () => {
         try {
-            const res = await fetch('/api/ktbsdata-admin/status', {
+            const res = await fetch('/api/ktbsdata/admin/status', {
                 headers: { 'X-Admin-Password': password },
             });
             if (res.ok) setKtBsDataStatus(await res.json());
@@ -108,7 +108,7 @@ export function Admin() {
         const formData = new FormData();
         formData.append('file', file);
         try {
-            const res = await fetch('/api/admin/upload', {
+            const res = await fetch('/api/wh40k/admin/upload', {
                 method: 'POST',
                 headers: { 'X-Admin-Password': password },
                 body: formData,
@@ -132,7 +132,7 @@ export function Admin() {
         setBsDataMsg('');
         setBsDataError('');
         try {
-            const res = await fetch('/api/bsdata-admin/import', {
+            const res = await fetch('/api/bsdata/admin/import', {
                 method: 'POST',
                 headers: { 'X-Admin-Password': password },
             });
@@ -155,7 +155,7 @@ export function Admin() {
         setKtBsDataMsg('');
         setKtBsDataError('');
         try {
-            const res = await fetch('/api/ktbsdata-admin/import', {
+            const res = await fetch('/api/ktbsdata/admin/import', {
                 method: 'POST',
                 headers: { 'X-Admin-Password': password },
             });

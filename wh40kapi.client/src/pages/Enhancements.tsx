@@ -15,7 +15,7 @@ export function Enhancements() {
     const [search, setSearch] = useState('');
 
     useEffect(() => {
-        fetch('/api/enhancements')
+        fetch('/api/wh40k/enhancements')
             .then(r => r.ok ? r.json() : Promise.reject('Failed to load'))
             .then(setItems)
             .catch(e => setError(String(e)))

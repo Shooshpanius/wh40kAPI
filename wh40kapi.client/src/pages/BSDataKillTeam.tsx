@@ -36,7 +36,7 @@ export function BSDataKillTeam() {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        fetch('/api/ktbsdata-catalogues')
+        fetch('/api/ktbsdata/catalogues')
             .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(`${r.status} ${r.statusText}: ${t}`)))
             .then(setCatalogues)
             .catch(e => setError('Failed to load catalogues: ' + String(e)))
@@ -48,7 +48,7 @@ export function BSDataKillTeam() {
         setSelectedUnit(null);
         setProfiles([]);
         setUnitsLoading(true);
-        fetch(`/api/ktbsdata-catalogues/${encodeURIComponent(catalogue.id)}/units`)
+        fetch(`/api/ktbsdata/catalogues/${encodeURIComponent(catalogue.id)}/units`)
             .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(`${r.status} ${r.statusText}: ${t}`)))
             .then(setUnits)
             .catch(() => setUnits([]))
@@ -58,7 +58,7 @@ export function BSDataKillTeam() {
     const loadProfiles = (unit: Unit) => {
         setSelectedUnit(unit);
         setProfilesLoading(true);
-        fetch(`/api/ktbsdata-units/${encodeURIComponent(unit.id)}/profiles`)
+        fetch(`/api/ktbsdata/units/${encodeURIComponent(unit.id)}/profiles`)
             .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(`${r.status} ${r.statusText}: ${t}`)))
             .then(setProfiles)
             .catch(() => setProfiles([]))

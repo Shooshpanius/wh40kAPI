@@ -9,7 +9,7 @@ namespace wh40kAPI.Server.Controllers;
 
 [ApiController]
 [ApiExplorerSettings(IgnoreApi = true)]
-[Route("api/[controller]")]
+[Route("api/wh40k/[controller]")]
 public class AdminController(AppDbContext db, DataImportService importService) : ControllerBase
 {
     /// <summary>

@@ -14,7 +14,7 @@ export function Detachments() {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        fetch('/api/detachments')
+        fetch('/api/wh40k/detachments')
             .then(r => r.ok ? r.json() : Promise.reject('Failed to load'))
             .then(setItems)
             .catch(e => setError(String(e)))

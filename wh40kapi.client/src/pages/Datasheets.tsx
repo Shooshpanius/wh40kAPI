@@ -17,14 +17,14 @@ export function Datasheets() {
     const [factions, setFactions] = useState<{ id: string; name: string }[]>([]);
 
     useEffect(() => {
-        fetch('/api/factions')
+        fetch('/api/wh40k/factions')
             .then(r => r.ok ? r.json() : Promise.reject('Failed to load factions'))
             .then(setFactions)
             .catch(() => {});
     }, []);
 
     useEffect(() => {
-        const url = faction ? `/api/datasheets?factionId=${encodeURIComponent(faction)}` : '/api/datasheets';
+        const url = faction ? `/api/wh40k/datasheets?factionId=${encodeURIComponent(faction)}` : '/api/wh40k/datasheets';
         setLoading(true);
         fetch(url)
             .then(r => r.ok ? r.json() : Promise.reject('Failed to load'))

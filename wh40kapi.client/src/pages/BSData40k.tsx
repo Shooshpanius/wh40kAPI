@@ -36,7 +36,7 @@ export function BSData40k() {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        fetch('/api/bsdata-catalogues')
+        fetch('/api/bsdata/catalogues')
             .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(`${r.status} ${r.statusText}: ${t}`)))
             .then(setCatalogues)
             .catch(e => setError(String(e)))
@@ -48,7 +48,7 @@ export function BSData40k() {
         setSelectedUnit(null);
         setProfiles([]);
         setUnitsLoading(true);
-        fetch(`/api/bsdata-catalogues/${encodeURIComponent(catalogue.id)}/units`)
+        fetch(`/api/bsdata/catalogues/${encodeURIComponent(catalogue.id)}/units`)
             .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(`${r.status} ${r.statusText}: ${t}`)))
             .then(setUnits)
             .catch(() => setUnits([]))
@@ -58,7 +58,7 @@ export function BSData40k() {
     const loadProfiles = (unit: Unit) => {
         setSelectedUnit(unit);
         setProfilesLoading(true);
-        fetch(`/api/bsdata-units/${encodeURIComponent(unit.id)}/profiles`)
+        fetch(`/api/bsdata/units/${encodeURIComponent(unit.id)}/profiles`)
             .then(r => r.ok ? r.json() : r.text().then(t => Promise.reject(`${r.status} ${r.statusText}: ${t}`)))
             .then(setProfiles)
             .catch(() => setProfiles([]))

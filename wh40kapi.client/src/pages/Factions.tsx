@@ -12,7 +12,7 @@ export function Factions() {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        fetch('/api/factions')
+        fetch('/api/wh40k/factions')
             .then(r => r.ok ? r.json() : Promise.reject('Failed to load'))
             .then(setFactions)
             .catch(e => setError(String(e)))

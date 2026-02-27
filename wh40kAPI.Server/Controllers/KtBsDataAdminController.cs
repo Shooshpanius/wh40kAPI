@@ -8,7 +8,7 @@ namespace wh40kAPI.Server.Controllers;
 
 [ApiController]
 [ApiExplorerSettings(IgnoreApi = true)]
-[Route("api/ktbsdata-admin")]
+[Route("api/ktbsdata/admin")]
 public class KtBsDataAdminController(KtBsDataDbContext db, KtBsDataImportService importService) : ControllerBase
 {
     /// <summary>
