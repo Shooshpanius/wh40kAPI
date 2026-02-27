@@ -11,7 +11,7 @@ export function Home() {
                 <Card title="Detachments" desc="Army detachment rules" href="/detachments" />
                 <Card title="Stratagems" desc="Battle stratagems" href="/stratagems" />
                 <Card title="Enhancements" desc="Character enhancements" href="/enhancements" />
-                <Card title="API Docs" desc="Swagger / Scalar UI" href="/scalar/v1" external />
+                <Card title="API Docs" desc="Swagger / Scalar UI" href="/scalar/wh40k" external />
             </div>
 
             <div style={styles.footer}>

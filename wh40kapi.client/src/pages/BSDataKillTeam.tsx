@@ -90,7 +90,7 @@ export function BSDataKillTeam() {
                 </p>
                 <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
                     <button onClick={() => navigate('/')} style={styles.button}>← Вернуться на главную</button>
-                    <a href="/scalar/v1" target="_blank" rel="noopener noreferrer" style={styles.buttonLink}>📖 API Docs</a>
+                    <a href="/scalar/ktbsdata" target="_blank" rel="noopener noreferrer" style={styles.buttonLink}>📖 API Docs</a>
                 </div>
             </div>
         );
@@ -105,7 +105,7 @@ export function BSDataKillTeam() {
             <div style={styles.header}>
                 <h2 style={styles.title}>API BSData Kill Team</h2>
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <a href="/scalar/v1" target="_blank" rel="noopener noreferrer" style={styles.buttonLink}>📖 API Docs</a>
+                    <a href="/scalar/ktbsdata" target="_blank" rel="noopener noreferrer" style={styles.buttonLink}>📖 API Docs</a>
                     <button onClick={() => navigate('/')} style={styles.btnSecondary}>← Главная</button>
                 </div>
             </div>

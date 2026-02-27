@@ -6,6 +6,7 @@ using wh40kAPI.Server.Models.KtBsData;
 namespace wh40kAPI.Server.Controllers;
 
 [ApiController]
+[ApiExplorerSettings(GroupName = "ktbsdata")]
 [Route("api/ktbsdata/units")]
 public class KtBsDataUnitsController(KtBsDataDbContext db) : ControllerBase
 {
