@@ -14,6 +14,7 @@ public class BsDataUnitsController(BsDataDbContext db) : ControllerBase
     public async Task<IEnumerable<BsDataUnit>> GetAll([FromQuery] string? catalogueId, [FromQuery] string? category)
     {
         IQueryable<BsDataUnit> query = db.Units.AsNoTracking()
+            .Include(u => u.Categories.Where(c => c.Primary))
             .Where(u => catalogueId == null || u.CatalogueId == catalogueId);
 
         if (category != null)
