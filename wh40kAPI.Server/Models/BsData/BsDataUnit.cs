@@ -11,4 +11,5 @@ public class BsDataUnit
     public string? EntryType { get; set; }
     public string? Points { get; set; }
     public bool Hidden { get; set; }
+    public ICollection<BsDataUnitCategory> Categories { get; set; } = [];
 }

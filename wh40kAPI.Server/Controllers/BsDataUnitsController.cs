@@ -30,7 +30,10 @@ public class BsDataUnitsController(BsDataDbContext db) : ControllerBase
     [HttpGet("{id}")]
     public async Task<ActionResult<BsDataUnit>> GetById(string id)
     {
-        var item = await db.Units.FindAsync(id);
+        var item = await db.Units
+            .Include(u => u.Categories)
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == id);
         return item is null ? NotFound() : Ok(item);
     }
 

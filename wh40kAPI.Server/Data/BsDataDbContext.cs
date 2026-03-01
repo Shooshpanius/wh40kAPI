@@ -14,7 +14,7 @@ public class BsDataDbContext(DbContextOptions<BsDataDbContext> options) : DbCont
     {
         modelBuilder.Entity<BsDataUnitCategory>()
             .HasOne<BsDataUnit>()
-            .WithMany()
+            .WithMany(u => u.Categories)
             .HasForeignKey(c => c.UnitId)
             .OnDelete(DeleteBehavior.Cascade);
 
