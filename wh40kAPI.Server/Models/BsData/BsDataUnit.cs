@@ -10,4 +10,5 @@ public class BsDataUnit
     public string Name { get; set; } = string.Empty;
     public string? EntryType { get; set; }
     public string? Points { get; set; }
+    public bool Hidden { get; set; }
 }

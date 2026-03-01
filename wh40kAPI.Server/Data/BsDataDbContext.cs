@@ -8,4 +8,20 @@ public class BsDataDbContext(DbContextOptions<BsDataDbContext> options) : DbCont
     public DbSet<BsDataCatalogue> Catalogues => Set<BsDataCatalogue>();
     public DbSet<BsDataUnit> Units => Set<BsDataUnit>();
     public DbSet<BsDataProfile> Profiles => Set<BsDataProfile>();
+    public DbSet<BsDataUnitCategory> UnitCategories => Set<BsDataUnitCategory>();
+
+    protected override void OnModelCreating(ModelBuilder modelBuilder)
+    {
+        modelBuilder.Entity<BsDataUnitCategory>()
+            .HasOne<BsDataUnit>()
+            .WithMany()
+            .HasForeignKey(c => c.UnitId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<BsDataProfile>()
+            .HasOne<BsDataUnit>()
+            .WithMany()
+            .HasForeignKey(p => p.UnitId)
+            .OnDelete(DeleteBehavior.Cascade);
+    }
 }

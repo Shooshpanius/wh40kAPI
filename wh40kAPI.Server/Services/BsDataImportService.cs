@@ -21,12 +21,14 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         logger.LogInformation("Found {Count} .cat files to import", catFiles.Count);
 
         // 2. Clear existing BSData
+        await db.UnitCategories.ExecuteDeleteAsync();
         await db.Profiles.ExecuteDeleteAsync();
         await db.Units.ExecuteDeleteAsync();
         await db.Catalogues.ExecuteDeleteAsync();
 
         int totalUnits = 0;
         int totalProfiles = 0;
+        int totalCategories = 0;
 
         // Keep global seen sets to avoid adding entities with duplicate primary keys
         var seenCatalogueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -40,7 +42,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             {
                 logger.LogInformation("Importing {File}", fileName);
                 var xml = await client.GetStringAsync(downloadUrl);
-                var (catalogue, units, profiles) = ParseCatalogueXml(xml);
+                var (catalogue, units, profiles, categories) = ParseCatalogueXml(xml);
 
                 if (catalogue == null) continue;
 
@@ -77,15 +79,23 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                     newProfiles.Add(p);
                 }
 
+                // Only include categories for units that were accepted
+                var acceptedUnitIds = new HashSet<string>(newUnits.Select(u => u.Id), StringComparer.OrdinalIgnoreCase);
+                var newCategories = categories.Where(c => acceptedUnitIds.Contains(c.UnitId)).ToList();
+
                 if (newUnits.Count > 0)
                     db.Units.AddRange(newUnits);
 
                 if (newProfiles.Count > 0)
                     db.Profiles.AddRange(newProfiles);
 
+                if (newCategories.Count > 0)
+                    db.UnitCategories.AddRange(newCategories);
+
                 await db.SaveChangesAsync();
                 totalUnits += newUnits.Count;
                 totalProfiles += newProfiles.Count;
+                totalCategories += newCategories.Count;
             }
             catch (Exception ex)
             {
@@ -94,7 +104,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             }
         }
 
-        logger.LogInformation("Import complete. Units: {TotalUnits}, Profiles: {TotalProfiles}", totalUnits, totalProfiles);
+        logger.LogInformation("Import complete. Units: {TotalUnits}, Profiles: {TotalProfiles}, Categories: {TotalCategories}", totalUnits, totalProfiles, totalCategories);
         return totalUnits;
     }
 
@@ -126,31 +136,34 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         return files;
     }
 
-    private static (BsDataCatalogue? Catalogue, List<BsDataUnit> Units, List<BsDataProfile> Profiles)
+    private static (BsDataCatalogue? Catalogue, List<BsDataUnit> Units, List<BsDataProfile> Profiles, List<BsDataUnitCategory> Categories)
         ParseCatalogueXml(string xml)
     {
         XDocument doc;
         try { doc = XDocument.Parse(xml); }
-        catch { return (null, [], []); }
+        catch { return (null, [], [], []); }
 
         var root = doc.Root;
-        if (root == null) return (null, [], []);
+        if (root == null) return (null, [], [], []);
 
         var id = root.Attribute("id")?.Value ?? "";
         var name = root.Attribute("name")?.Value ?? "";
         if (!int.TryParse(root.Attribute("revision")?.Value, out var revision))
             revision = 0;
+        var library = string.Equals(root.Attribute("library")?.Value, "true", StringComparison.OrdinalIgnoreCase);
 
         var catalogue = new BsDataCatalogue
         {
             Id = id,
             Name = name,
             Revision = revision,
+            Library = library,
             FetchedAt = DateTime.UtcNow,
         };
 
         var units = new List<BsDataUnit>();
         var profiles = new List<BsDataProfile>();
+        var categories = new List<BsDataUnitCategory>();
         var seenUnitIds = new HashSet<string>();
 
         // Parse sharedSelectionEntries (top-level reusable units)
@@ -158,7 +171,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .Element(Ns + "sharedSelectionEntries")
             ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
-            ExtractEntry(entry, id, units, profiles, seenUnitIds);
+            ExtractEntry(entry, id, units, profiles, categories, seenUnitIds);
         }
 
         // Also parse top-level selectionEntries within forces (if present)
@@ -169,7 +182,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             // entry links are references; we skip them to avoid duplicates
         }
 
-        return (catalogue, units, profiles);
+        return (catalogue, units, profiles, categories);
     }
 
     private static void ExtractEntry(
@@ -177,6 +190,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         string catalogueId,
         List<BsDataUnit> units,
         List<BsDataProfile> profiles,
+        List<BsDataUnitCategory> categories,
         HashSet<string> seenUnitIds)
     {
         var unitId = entry.Attribute("id")?.Value ?? "";
@@ -185,6 +199,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
 
         var unitName = entry.Attribute("name")?.Value ?? "";
         var entryType = entry.Attribute("type")?.Value;
+        var hidden = string.Equals(entry.Attribute("hidden")?.Value, "true", StringComparison.OrdinalIgnoreCase);
 
         // Get points cost
         var points = entry
@@ -201,7 +216,24 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             Name = unitName,
             EntryType = entryType,
             Points = points,
+            Hidden = hidden,
         });
+
+        // Extract categoryLinks (faction, role, keywords)
+        foreach (var cl in entry
+            .Element(Ns + "categoryLinks")
+            ?.Elements(Ns + "categoryLink") ?? Enumerable.Empty<XElement>())
+        {
+            var catName = cl.Attribute("name")?.Value ?? "";
+            if (string.IsNullOrEmpty(catName)) continue;
+            var primary = string.Equals(cl.Attribute("primary")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+            categories.Add(new BsDataUnitCategory
+            {
+                UnitId = unitId,
+                Name = catName,
+                Primary = primary,
+            });
+        }
 
         // Extract profiles
         foreach (var profile in entry

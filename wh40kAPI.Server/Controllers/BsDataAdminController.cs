@@ -35,6 +35,7 @@ public class BsDataAdminController(BsDataDbContext db, BsDataImportService impor
             catalogues = await db.Catalogues.CountAsync(),
             units = await db.Units.CountAsync(),
             profiles = await db.Profiles.CountAsync(),
+            unitCategories = await db.UnitCategories.CountAsync(),
         });
     }
 }
