@@ -92,6 +92,9 @@ echo -n "your_password" | sha256sum
 | `GET /api/bsdata/catalogues/{id}/units` | Units for a catalogue |
 | `GET /api/bsdata/units` | All units (filter by `catalogueId`) |
 | `GET /api/bsdata/units/{id}/profiles` | Profiles for a unit |
+| `GET /api/bsdata/units/{id}/categories` | Categories for a unit |
+| `GET /api/bsdata/units/{id}/infolinks` | Info links for a unit (rules, abilities, etc.) |
+| `GET /api/bsdata/units/{id}/entrylinks` | Entry links for a unit (wargear, options, etc.) |
 | `POST /api/bsdata/admin/import` | Import from BSData/wh40k-10e (requires X-Admin-Password header) |
 | `GET /api/bsdata/admin/status` | BSData database status (requires X-Admin-Password header) |
 

@@ -12,4 +12,6 @@ public class BsDataUnit
     public string? Points { get; set; }
     public bool Hidden { get; set; }
     public ICollection<BsDataUnitCategory> Categories { get; set; } = [];
+    public ICollection<BsDataInfoLink> InfoLinks { get; set; } = [];
+    public ICollection<BsDataEntryLink> EntryLinks { get; set; } = [];
 }
