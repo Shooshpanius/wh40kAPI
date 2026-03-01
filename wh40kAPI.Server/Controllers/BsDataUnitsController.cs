@@ -55,4 +55,28 @@ public class BsDataUnitsController(BsDataDbContext db) : ControllerBase
             .OrderBy(c => c.Name)
             .ToListAsync();
     }
+
+    [HttpGet("{id}/infolinks")]
+    public async Task<ActionResult<IEnumerable<BsDataInfoLink>>> GetInfoLinks(string id)
+    {
+        if (!await db.Units.AnyAsync(u => u.Id == id))
+            return NotFound();
+
+        return await db.InfoLinks.AsNoTracking()
+            .Where(l => l.UnitId == id)
+            .OrderBy(l => l.Name)
+            .ToListAsync();
+    }
+
+    [HttpGet("{id}/entrylinks")]
+    public async Task<ActionResult<IEnumerable<BsDataEntryLink>>> GetEntryLinks(string id)
+    {
+        if (!await db.Units.AnyAsync(u => u.Id == id))
+            return NotFound();
+
+        return await db.EntryLinks.AsNoTracking()
+            .Where(l => l.UnitId == id)
+            .OrderBy(l => l.Name)
+            .ToListAsync();
+    }
 }

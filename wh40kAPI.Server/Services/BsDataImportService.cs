@@ -27,11 +27,15 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         int totalUnits = 0;
         int totalProfiles = 0;
         int totalCategories = 0;
+        int totalInfoLinks = 0;
+        int totalEntryLinks = 0;
 
         // Keep global seen sets to avoid adding entities with duplicate primary keys
         var seenCatalogueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenUnitIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenProfileIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenInfoLinkIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenEntryLinkIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // 3. Process each .cat file
         foreach (var (fileName, downloadUrl) in catFiles)
@@ -40,7 +44,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             {
                 logger.LogInformation("Importing {File}", fileName);
                 var xml = await client.GetStringAsync(downloadUrl);
-                var (catalogue, units, profiles, categories) = ParseCatalogueXml(xml);
+                var (catalogue, units, profiles, categories, infoLinks, entryLinks) = ParseCatalogueXml(xml);
 
                 if (catalogue == null) continue;
 
@@ -77,9 +81,31 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                     newProfiles.Add(p);
                 }
 
-                // Only include categories for units that were accepted
+                // Only include categories, infoLinks and entryLinks for units that were accepted
                 var acceptedUnitIds = new HashSet<string>(newUnits.Select(u => u.Id), StringComparer.OrdinalIgnoreCase);
                 var newCategories = categories.Where(c => acceptedUnitIds.Contains(c.UnitId)).ToList();
+
+                var newInfoLinks = new List<BsDataInfoLink>();
+                foreach (var il in infoLinks.Where(l => acceptedUnitIds.Contains(l.UnitId)))
+                {
+                    if (!seenInfoLinkIds.Add(il.Id))
+                    {
+                        logger.LogDebug("Skipping duplicate infoLink {InfoLinkId} from {File}", il.Id, fileName);
+                        continue;
+                    }
+                    newInfoLinks.Add(il);
+                }
+
+                var newEntryLinks = new List<BsDataEntryLink>();
+                foreach (var el in entryLinks.Where(l => acceptedUnitIds.Contains(l.UnitId)))
+                {
+                    if (!seenEntryLinkIds.Add(el.Id))
+                    {
+                        logger.LogDebug("Skipping duplicate entryLink {EntryLinkId} from {File}", el.Id, fileName);
+                        continue;
+                    }
+                    newEntryLinks.Add(el);
+                }
 
                 if (newUnits.Count > 0)
                     db.Units.AddRange(newUnits);
@@ -90,10 +116,18 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 if (newCategories.Count > 0)
                     db.UnitCategories.AddRange(newCategories);
 
+                if (newInfoLinks.Count > 0)
+                    db.InfoLinks.AddRange(newInfoLinks);
+
+                if (newEntryLinks.Count > 0)
+                    db.EntryLinks.AddRange(newEntryLinks);
+
                 await db.SaveChangesAsync();
                 totalUnits += newUnits.Count;
                 totalProfiles += newProfiles.Count;
                 totalCategories += newCategories.Count;
+                totalInfoLinks += newInfoLinks.Count;
+                totalEntryLinks += newEntryLinks.Count;
             }
             catch (Exception ex)
             {
@@ -102,7 +136,8 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             }
         }
 
-        logger.LogInformation("Import complete. Units: {TotalUnits}, Profiles: {TotalProfiles}, Categories: {TotalCategories}", totalUnits, totalProfiles, totalCategories);
+        logger.LogInformation("Import complete. Units: {TotalUnits}, Profiles: {TotalProfiles}, Categories: {TotalCategories}, InfoLinks: {TotalInfoLinks}, EntryLinks: {TotalEntryLinks}",
+            totalUnits, totalProfiles, totalCategories, totalInfoLinks, totalEntryLinks);
         return totalUnits;
     }
 
@@ -134,15 +169,15 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         return files;
     }
 
-    private static (BsDataCatalogue? Catalogue, List<BsDataUnit> Units, List<BsDataProfile> Profiles, List<BsDataUnitCategory> Categories)
+    private static (BsDataCatalogue? Catalogue, List<BsDataUnit> Units, List<BsDataProfile> Profiles, List<BsDataUnitCategory> Categories, List<BsDataInfoLink> InfoLinks, List<BsDataEntryLink> EntryLinks)
         ParseCatalogueXml(string xml)
     {
         XDocument doc;
         try { doc = XDocument.Parse(xml); }
-        catch { return (null, [], [], []); }
+        catch { return (null, [], [], [], [], []); }
 
         var root = doc.Root;
-        if (root == null) return (null, [], [], []);
+        if (root == null) return (null, [], [], [], [], []);
 
         var id = root.Attribute("id")?.Value ?? "";
         var name = root.Attribute("name")?.Value ?? "";
@@ -162,6 +197,8 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         var units = new List<BsDataUnit>();
         var profiles = new List<BsDataProfile>();
         var categories = new List<BsDataUnitCategory>();
+        var infoLinks = new List<BsDataInfoLink>();
+        var entryLinks = new List<BsDataEntryLink>();
         var seenUnitIds = new HashSet<string>();
 
         // Parse sharedSelectionEntries (top-level reusable units)
@@ -169,7 +206,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .Element(Ns + "sharedSelectionEntries")
             ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
-            ExtractEntry(entry, id, units, profiles, categories, seenUnitIds);
+            ExtractEntry(entry, id, units, profiles, categories, infoLinks, entryLinks, seenUnitIds);
         }
 
         // Also parse top-level selectionEntries within forces (if present)
@@ -180,7 +217,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             // entry links are references; we skip them to avoid duplicates
         }
 
-        return (catalogue, units, profiles, categories);
+        return (catalogue, units, profiles, categories, infoLinks, entryLinks);
     }
 
     private static void ExtractEntry(
@@ -189,6 +226,8 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         List<BsDataUnit> units,
         List<BsDataProfile> profiles,
         List<BsDataUnitCategory> categories,
+        List<BsDataInfoLink> infoLinks,
+        List<BsDataEntryLink> entryLinks,
         HashSet<string> seenUnitIds)
     {
         var unitId = entry.Attribute("id")?.Value ?? "";
@@ -260,6 +299,46 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 Characteristics = characteristics != null
                     ? JsonSerializer.Serialize(characteristics)
                     : null,
+            });
+        }
+
+        // Extract infoLinks
+        foreach (var il in entry
+            .Element(Ns + "infoLinks")
+            ?.Elements(Ns + "infoLink") ?? Enumerable.Empty<XElement>())
+        {
+            var linkId = il.Attribute("id")?.Value ?? "";
+            if (string.IsNullOrEmpty(linkId)) continue;
+            var targetId = il.Attribute("targetId")?.Value ?? "";
+            if (string.IsNullOrEmpty(targetId)) continue;
+            infoLinks.Add(new BsDataInfoLink
+            {
+                Id = linkId,
+                UnitId = unitId,
+                Name = il.Attribute("name")?.Value ?? "",
+                Hidden = string.Equals(il.Attribute("hidden")?.Value, "true", StringComparison.OrdinalIgnoreCase),
+                TargetId = targetId,
+                Type = il.Attribute("type")?.Value,
+            });
+        }
+
+        // Extract entryLinks
+        foreach (var el in entry
+            .Element(Ns + "entryLinks")
+            ?.Elements(Ns + "entryLink") ?? Enumerable.Empty<XElement>())
+        {
+            var linkId = el.Attribute("id")?.Value ?? "";
+            if (string.IsNullOrEmpty(linkId)) continue;
+            var targetId = el.Attribute("targetId")?.Value ?? "";
+            if (string.IsNullOrEmpty(targetId)) continue;
+            entryLinks.Add(new BsDataEntryLink
+            {
+                Id = linkId,
+                UnitId = unitId,
+                Name = el.Attribute("name")?.Value ?? "",
+                Hidden = string.Equals(el.Attribute("hidden")?.Value, "true", StringComparison.OrdinalIgnoreCase),
+                TargetId = targetId,
+                Type = el.Attribute("type")?.Value,
             });
         }
     }
