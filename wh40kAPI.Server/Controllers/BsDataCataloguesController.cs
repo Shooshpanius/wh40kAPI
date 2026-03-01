@@ -25,6 +25,8 @@ public class BsDataCataloguesController(BsDataDbContext db) : ControllerBase
     public async Task<IEnumerable<BsDataUnit>> GetUnits(string id) =>
         await db.Units.AsNoTracking()
             .Include(u => u.Categories.Where(c => c.Primary))
+            .Include(u => u.InfoLinks)
+            .Include(u => u.EntryLinks)
             .Where(u => u.CatalogueId == id)
             .OrderBy(u => u.Name)
             .ToListAsync();
