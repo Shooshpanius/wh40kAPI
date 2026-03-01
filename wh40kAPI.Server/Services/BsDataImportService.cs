@@ -20,11 +20,9 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         var catFiles = await FetchCatFileListAsync(client);
         logger.LogInformation("Found {Count} .cat files to import", catFiles.Count);
 
-        // 2. Clear existing BSData
-        await db.UnitCategories.ExecuteDeleteAsync();
-        await db.Profiles.ExecuteDeleteAsync();
-        await db.Units.ExecuteDeleteAsync();
-        await db.Catalogues.ExecuteDeleteAsync();
+        // 2. Drop and recreate all BSData tables so schema changes take effect
+        await db.Database.EnsureDeletedAsync();
+        await db.Database.EnsureCreatedAsync();
 
         int totalUnits = 0;
         int totalProfiles = 0;
