@@ -79,4 +79,26 @@ public class BsDataUnitsController(BsDataDbContext db) : ControllerBase
             .OrderBy(l => l.Name)
             .ToListAsync();
     }
+
+    [HttpGet("{id}/constraints")]
+    public async Task<ActionResult<IEnumerable<BsDataConstraint>>> GetConstraints(string id)
+    {
+        if (!await db.Units.AnyAsync(u => u.Id == id))
+            return NotFound();
+
+        return await db.Constraints.AsNoTracking()
+            .Where(c => c.UnitId == id)
+            .ToListAsync();
+    }
+
+    [HttpGet("{id}/modifiergroups")]
+    public async Task<ActionResult<IEnumerable<BsDataModifierGroup>>> GetModifierGroups(string id)
+    {
+        if (!await db.Units.AnyAsync(u => u.Id == id))
+            return NotFound();
+
+        return await db.ModifierGroups.AsNoTracking()
+            .Where(g => g.UnitId == id)
+            .ToListAsync();
+    }
 }
