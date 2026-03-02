@@ -113,9 +113,9 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 var newConstraints = new List<BsDataConstraint>();
                 foreach (var c in constraints.Where(c => acceptedUnitIds.Contains(c.UnitId)))
                 {
-                    if (!seenConstraintIds.Add(c.Id))
+                    if (!seenConstraintIds.Add(c.UnitId + ":" + c.Id))
                     {
-                        logger.LogDebug("Skipping duplicate constraint {ConstraintId} from {File}", c.Id, fileName);
+                        logger.LogDebug("Skipping duplicate constraint {UnitId}:{ConstraintId} from {File}", c.UnitId, c.Id, fileName);
                         continue;
                     }
                     newConstraints.Add(c);
