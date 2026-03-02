@@ -11,6 +11,8 @@ public class BsDataDbContext(DbContextOptions<BsDataDbContext> options) : DbCont
     public DbSet<BsDataUnitCategory> UnitCategories => Set<BsDataUnitCategory>();
     public DbSet<BsDataInfoLink> InfoLinks => Set<BsDataInfoLink>();
     public DbSet<BsDataEntryLink> EntryLinks => Set<BsDataEntryLink>();
+    public DbSet<BsDataConstraint> Constraints => Set<BsDataConstraint>();
+    public DbSet<BsDataModifierGroup> ModifierGroups => Set<BsDataModifierGroup>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -36,6 +38,18 @@ public class BsDataDbContext(DbContextOptions<BsDataDbContext> options) : DbCont
             .HasOne<BsDataUnit>()
             .WithMany(u => u.EntryLinks)
             .HasForeignKey(l => l.UnitId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<BsDataConstraint>()
+            .HasOne<BsDataUnit>()
+            .WithMany(u => u.Constraints)
+            .HasForeignKey(c => c.UnitId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<BsDataModifierGroup>()
+            .HasOne<BsDataUnit>()
+            .WithMany(u => u.ModifierGroups)
+            .HasForeignKey(g => g.UnitId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }

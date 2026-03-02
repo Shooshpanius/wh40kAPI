@@ -14,4 +14,6 @@ public class BsDataUnit
     public ICollection<BsDataUnitCategory> Categories { get; set; } = [];
     public ICollection<BsDataInfoLink> InfoLinks { get; set; } = [];
     public ICollection<BsDataEntryLink> EntryLinks { get; set; } = [];
+    public ICollection<BsDataConstraint> Constraints { get; set; } = [];
+    public ICollection<BsDataModifierGroup> ModifierGroups { get; set; } = [];
 }
