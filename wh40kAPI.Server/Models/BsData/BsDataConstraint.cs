@@ -1,10 +1,7 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace wh40kAPI.Server.Models.BsData;
 
 public class BsDataConstraint
 {
-    [Key]
     public string Id { get; set; } = string.Empty;
     public string UnitId { get; set; } = string.Empty;
     public string? Field { get; set; }

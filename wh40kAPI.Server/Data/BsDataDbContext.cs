@@ -41,6 +41,9 @@ public class BsDataDbContext(DbContextOptions<BsDataDbContext> options) : DbCont
             .OnDelete(DeleteBehavior.Cascade);
 
         modelBuilder.Entity<BsDataConstraint>()
+            .HasKey(c => new { c.UnitId, c.Id });
+
+        modelBuilder.Entity<BsDataConstraint>()
             .HasOne<BsDataUnit>()
             .WithMany(u => u.Constraints)
             .HasForeignKey(c => c.UnitId)
