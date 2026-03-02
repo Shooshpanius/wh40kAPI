@@ -383,20 +383,52 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         {
             var constraintId = c.Attribute("id")?.Value ?? "";
             if (string.IsNullOrEmpty(constraintId)) continue;
+            var field = c.Attribute("field")?.Value;
+            var scope = c.Attribute("scope")?.Value;
+            var value = c.Attribute("value")?.Value;
+            var percentValue = string.Equals(c.Attribute("percentValue")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+            var shared = string.Equals(c.Attribute("shared")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+            var includeChildSelections = string.Equals(c.Attribute("includeChildSelections")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+            var includeChildForces = string.Equals(c.Attribute("includeChildForces")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+            var childId = c.Attribute("childId")?.Value;
+            var type = c.Attribute("type")?.Value;
+
             constraints.Add(new BsDataConstraint
             {
                 Id = constraintId,
                 UnitId = unitId,
-                Field = c.Attribute("field")?.Value,
-                Scope = c.Attribute("scope")?.Value,
-                Value = c.Attribute("value")?.Value,
-                PercentValue = string.Equals(c.Attribute("percentValue")?.Value, "true", StringComparison.OrdinalIgnoreCase),
-                Shared = string.Equals(c.Attribute("shared")?.Value, "true", StringComparison.OrdinalIgnoreCase),
-                IncludeChildSelections = string.Equals(c.Attribute("includeChildSelections")?.Value, "true", StringComparison.OrdinalIgnoreCase),
-                IncludeChildForces = string.Equals(c.Attribute("includeChildForces")?.Value, "true", StringComparison.OrdinalIgnoreCase),
-                ChildId = c.Attribute("childId")?.Value,
-                Type = c.Attribute("type")?.Value,
+                Field = field,
+                Scope = scope,
+                Value = value,
+                PercentValue = percentValue,
+                Shared = shared,
+                IncludeChildSelections = includeChildSelections,
+                IncludeChildForces = includeChildForces,
+                ChildId = childId,
+                Type = type,
             });
+
+            // For constraints with field="selections" scope="force", also write a copy
+            // with scope="parent" to preserve the behavior where such constraints are
+            // recorded as scope="parent" as well.
+            if (string.Equals(field, "selections", StringComparison.Ordinal)
+                && string.Equals(scope, "force", StringComparison.Ordinal))
+            {
+                constraints.Add(new BsDataConstraint
+                {
+                    Id = constraintId + "_parent",
+                    UnitId = unitId,
+                    Field = field,
+                    Scope = "parent",
+                    Value = value,
+                    PercentValue = percentValue,
+                    Shared = shared,
+                    IncludeChildSelections = includeChildSelections,
+                    IncludeChildForces = includeChildForces,
+                    ChildId = childId,
+                    Type = type,
+                });
+            }
         }
 
         // Extract modifierGroups
