@@ -372,10 +372,14 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             });
         }
 
-        // Extract constraints
-        foreach (var c in entry
-            .Element(Ns + "constraints")
-            ?.Elements(Ns + "constraint") ?? Enumerable.Empty<XElement>())
+        // Extract constraints from the entry itself and from all nested selectionEntryGroups
+        var constraintSources =
+            (entry.Element(Ns + "constraints")?.Elements(Ns + "constraint") ?? Enumerable.Empty<XElement>())
+            .Concat(
+                (entry.Element(Ns + "selectionEntryGroups")?.Elements(Ns + "selectionEntryGroup") ?? Enumerable.Empty<XElement>())
+                .SelectMany(g => g.Element(Ns + "constraints")?.Elements(Ns + "constraint") ?? Enumerable.Empty<XElement>()));
+
+        foreach (var c in constraintSources)
         {
             var constraintId = c.Attribute("id")?.Value ?? "";
             if (string.IsNullOrEmpty(constraintId)) continue;
