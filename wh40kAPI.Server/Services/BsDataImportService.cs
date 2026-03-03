@@ -404,27 +404,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 Type = type,
             });
 
-            // For constraints with field="selections" scope="force", also write a copy
-            // with scope="parent" to preserve the behavior where such constraints are
-            // recorded as scope="parent" as well.
-            if (string.Equals(field, "selections", StringComparison.Ordinal)
-                && string.Equals(scope, "force", StringComparison.Ordinal))
-            {
-                constraints.Add(new BsDataConstraint
-                {
-                    Id = constraintId + "_parent",
-                    UnitId = unitId,
-                    Field = field,
-                    Scope = "parent",
-                    Value = value,
-                    PercentValue = percentValue,
-                    Shared = shared,
-                    IncludeChildSelections = includeChildSelections,
-                    IncludeChildForces = includeChildForces,
-                    ChildId = childId,
-                    Type = type,
-                });
-            }
+
         }
 
         // Extract modifierGroups
