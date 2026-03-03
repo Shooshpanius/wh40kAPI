@@ -276,6 +276,23 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .Select(c => c.Attribute("value")?.Value)
             .FirstOrDefault();
 
+        // Extract min/max roster quantities from top-level constraints
+        int? minInRoster = null;
+        int? maxInRoster = null;
+        foreach (var constraint in entry.Element(Ns + "constraints")?.Elements(Ns + "constraint") ?? Enumerable.Empty<XElement>())
+        {
+            var cType = constraint.Attribute("type")?.Value;
+            var cField = constraint.Attribute("field")?.Value;
+            if (!string.Equals(cField, "selections", StringComparison.OrdinalIgnoreCase)) continue;
+            if (int.TryParse(constraint.Attribute("value")?.Value, out var cVal))
+            {
+                if (cType == "min" && minInRoster == null)
+                    minInRoster = cVal;
+                else if (cType == "max" && maxInRoster == null)
+                    maxInRoster = cVal;
+            }
+        }
+
         units.Add(new BsDataUnit
         {
             Id = unitId,
@@ -284,6 +301,8 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             EntryType = entryType,
             Points = points,
             Hidden = hidden,
+            MinInRoster = minInRoster,
+            MaxInRoster = maxInRoster,
         });
 
         // Extract categoryLinks (faction, role, keywords)

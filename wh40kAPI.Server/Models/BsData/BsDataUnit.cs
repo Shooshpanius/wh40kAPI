@@ -11,6 +11,8 @@ public class BsDataUnit
     public string? EntryType { get; set; }
     public string? Points { get; set; }
     public bool Hidden { get; set; }
+    public int? MinInRoster { get; set; }
+    public int? MaxInRoster { get; set; }
     public ICollection<BsDataUnitCategory> Categories { get; set; } = [];
     public ICollection<BsDataInfoLink> InfoLinks { get; set; } = [];
     public ICollection<BsDataEntryLink> EntryLinks { get; set; } = [];

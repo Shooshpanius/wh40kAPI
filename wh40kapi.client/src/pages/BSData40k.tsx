@@ -13,6 +13,8 @@ interface Unit {
     name: string;
     entryType: string | null;
     points: string | null;
+    minInRoster: number | null;
+    maxInRoster: number | null;
 }
 
 interface Profile {
@@ -157,6 +159,8 @@ export function BSData40k() {
                                             <Th>Юнит</Th>
                                             <Th>Тип</Th>
                                             <Th>Pts</Th>
+                                            <Th>Min</Th>
+                                            <Th>Max</Th>
                                         </tr>
                                     </thead>
                                     <tbody>
@@ -173,6 +177,8 @@ export function BSData40k() {
                                                 <Td>{u.name}</Td>
                                                 <Td>{u.entryType ?? '—'}</Td>
                                                 <Td>{u.points ?? '—'}</Td>
+                                                <Td>{u.minInRoster ?? '—'}</Td>
+                                                <Td>{u.maxInRoster ?? '—'}</Td>
                                             </tr>
                                         ))}
                                     </tbody>
