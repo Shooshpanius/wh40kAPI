@@ -372,8 +372,8 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             });
         }
 
-        // Extract constraints from the entry itself and all nested elements at any depth
-        var constraintSources = entry.Descendants(Ns + "constraint");
+        // Extract constraints directly from the entry's own constraints element only
+        var constraintSources = entry.Element(Ns + "constraints")?.Elements(Ns + "constraint") ?? Enumerable.Empty<XElement>();
 
         foreach (var c in constraintSources)
         {
