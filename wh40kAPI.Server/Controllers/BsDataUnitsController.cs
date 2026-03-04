@@ -101,4 +101,16 @@ public class BsDataUnitsController(BsDataDbContext db) : ControllerBase
             .Where(g => g.UnitId == id)
             .ToListAsync();
     }
+
+    [HttpGet("{id}/cost-tiers")]
+    public async Task<ActionResult<IEnumerable<BsDataCostTier>>> GetCostTiers(string id)
+    {
+        if (!await db.Units.AnyAsync(u => u.Id == id))
+            return NotFound();
+
+        return await db.CostTiers.AsNoTracking()
+            .Where(t => t.UnitId == id)
+            .OrderBy(t => t.MinModels)
+            .ToListAsync();
+    }
 }

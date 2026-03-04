@@ -15,6 +15,7 @@ public class BsDataDbContext(DbContextOptions<BsDataDbContext> options) : DbCont
     public DbSet<BsDataEntryLink> EntryLinks => Set<BsDataEntryLink>();
     public DbSet<BsDataConstraint> Constraints => Set<BsDataConstraint>();
     public DbSet<BsDataModifierGroup> ModifierGroups => Set<BsDataModifierGroup>();
+    public DbSet<BsDataCostTier> CostTiers => Set<BsDataCostTier>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -67,6 +68,12 @@ public class BsDataDbContext(DbContextOptions<BsDataDbContext> options) : DbCont
             .HasOne<BsDataUnit>()
             .WithMany(u => u.ModifierGroups)
             .HasForeignKey(g => g.UnitId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<BsDataCostTier>()
+            .HasOne<BsDataUnit>()
+            .WithMany(u => u.CostTiers)
+            .HasForeignKey(t => t.UnitId)
             .OnDelete(DeleteBehavior.Cascade);
     }
 }
