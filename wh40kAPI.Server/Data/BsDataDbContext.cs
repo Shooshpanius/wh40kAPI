@@ -6,6 +6,8 @@ namespace wh40kAPI.Server.Data;
 public class BsDataDbContext(DbContextOptions<BsDataDbContext> options) : DbContext(options)
 {
     public DbSet<BsDataCatalogue> Catalogues => Set<BsDataCatalogue>();
+    public DbSet<BsDataCatalogueLink> CatalogueLinks => Set<BsDataCatalogueLink>();
+    public DbSet<BsDataRule> Rules => Set<BsDataRule>();
     public DbSet<BsDataUnit> Units => Set<BsDataUnit>();
     public DbSet<BsDataProfile> Profiles => Set<BsDataProfile>();
     public DbSet<BsDataUnitCategory> UnitCategories => Set<BsDataUnitCategory>();
@@ -16,6 +18,18 @@ public class BsDataDbContext(DbContextOptions<BsDataDbContext> options) : DbCont
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<BsDataCatalogueLink>()
+            .HasOne<BsDataCatalogue>()
+            .WithMany()
+            .HasForeignKey(l => l.CatalogueId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<BsDataRule>()
+            .HasOne<BsDataCatalogue>()
+            .WithMany()
+            .HasForeignKey(r => r.CatalogueId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<BsDataUnitCategory>()
             .HasOne<BsDataUnit>()
             .WithMany(u => u.Categories)

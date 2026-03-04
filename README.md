@@ -90,6 +90,8 @@ echo -n "your_password" | sha256sum
 |---|---|
 | `GET /api/bsdata/catalogues` | All catalogues |
 | `GET /api/bsdata/catalogues/{id}/units` | Units for a catalogue |
+| `GET /api/bsdata/catalogues/{id}/rules` | Shared rules/abilities for a catalogue |
+| `GET /api/bsdata/catalogues/{id}/links` | Catalogue dependency links |
 | `GET /api/bsdata/units` | All units (filter by `catalogueId`) |
 | `GET /api/bsdata/units/{id}/profiles` | Profiles for a unit |
 | `GET /api/bsdata/units/{id}/categories` | Categories for a unit |

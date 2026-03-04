@@ -30,4 +30,28 @@ public class BsDataCataloguesController(BsDataDbContext db) : ControllerBase
             .Where(u => u.CatalogueId == id)
             .OrderBy(u => u.Name)
             .ToListAsync();
+
+    [HttpGet("{id}/rules")]
+    public async Task<ActionResult<IEnumerable<BsDataRule>>> GetRules(string id)
+    {
+        if (!await db.Catalogues.AnyAsync(c => c.Id == id))
+            return NotFound();
+
+        return await db.Rules.AsNoTracking()
+            .Where(r => r.CatalogueId == id)
+            .OrderBy(r => r.Name)
+            .ToListAsync();
+    }
+
+    [HttpGet("{id}/links")]
+    public async Task<ActionResult<IEnumerable<BsDataCatalogueLink>>> GetLinks(string id)
+    {
+        if (!await db.Catalogues.AnyAsync(c => c.Id == id))
+            return NotFound();
+
+        return await db.CatalogueLinks.AsNoTracking()
+            .Where(l => l.CatalogueId == id)
+            .OrderBy(l => l.Name)
+            .ToListAsync();
+    }
 }
