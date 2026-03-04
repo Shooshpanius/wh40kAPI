@@ -26,4 +26,5 @@ public class BsDataUnit
     public ICollection<BsDataEntryLink> EntryLinks { get; set; } = [];
     public ICollection<BsDataConstraint> Constraints { get; set; } = [];
     public ICollection<BsDataModifierGroup> ModifierGroups { get; set; } = [];
+    public ICollection<BsDataCostTier> CostTiers { get; set; } = [];
 }

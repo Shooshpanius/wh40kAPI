@@ -11,6 +11,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
     private const string GithubApiBase = "https://api.github.com/repos/BSData/wh40k-10e/contents";
     private const string GithubRawBase = "https://raw.githubusercontent.com/BSData/wh40k-10e/main/";
     private static readonly XNamespace Ns = "http://www.battlescribe.net/schema/catalogueSchema";
+    private const string ConditionTypeGreaterThan = "greaterThan";
 
     public async Task<int> ImportAsync()
     {
@@ -31,6 +32,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         int totalEntryLinks = 0;
         int totalConstraints = 0;
         int totalModifierGroups = 0;
+        int totalCostTiers = 0;
         int totalRules = 0;
         int totalCatalogueLinks = 0;
 
@@ -51,7 +53,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             {
                 logger.LogInformation("Importing {File}", fileName);
                 var xml = await client.GetStringAsync(downloadUrl);
-                var (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, rules, catalogueLinks) = ParseCatalogueXml(xml);
+                var (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, rules, catalogueLinks) = ParseCatalogueXml(xml);
 
                 if (catalogue == null) continue;
 
@@ -129,6 +131,9 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 // filter only for accepted units.
                 var newModifierGroups = modifierGroups.Where(g => acceptedUnitIds.Contains(g.UnitId)).ToList();
 
+                // CostTiers also use a DB-generated int PK; filter for accepted units.
+                var newCostTiers = costTiers.Where(t => acceptedUnitIds.Contains(t.UnitId)).ToList();
+
                 var newRules = new List<BsDataRule>();
                 foreach (var r in rules)
                 {
@@ -174,6 +179,9 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 if (newModifierGroups.Count > 0)
                     db.ModifierGroups.AddRange(newModifierGroups);
 
+                if (newCostTiers.Count > 0)
+                    db.CostTiers.AddRange(newCostTiers);
+
                 if (newRules.Count > 0)
                     db.Rules.AddRange(newRules);
 
@@ -188,6 +196,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 totalEntryLinks += newEntryLinks.Count;
                 totalConstraints += newConstraints.Count;
                 totalModifierGroups += newModifierGroups.Count;
+                totalCostTiers += newCostTiers.Count;
                 totalRules += newRules.Count;
                 totalCatalogueLinks += newCatalogueLinks.Count;
             }
@@ -201,9 +210,9 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         logger.LogInformation(
             "Import complete. Units: {TotalUnits}, Profiles: {TotalProfiles}, Categories: {TotalCategories}, " +
             "InfoLinks: {TotalInfoLinks}, EntryLinks: {TotalEntryLinks}, Constraints: {TotalConstraints}, " +
-            "ModifierGroups: {TotalModifierGroups}, Rules: {TotalRules}, CatalogueLinks: {TotalCatalogueLinks}",
+            "ModifierGroups: {TotalModifierGroups}, CostTiers: {TotalCostTiers}, Rules: {TotalRules}, CatalogueLinks: {TotalCatalogueLinks}",
             totalUnits, totalProfiles, totalCategories, totalInfoLinks, totalEntryLinks,
-            totalConstraints, totalModifierGroups, totalRules, totalCatalogueLinks);
+            totalConstraints, totalModifierGroups, totalCostTiers, totalRules, totalCatalogueLinks);
         return totalUnits;
     }
 
@@ -244,16 +253,17 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         List<BsDataEntryLink> EntryLinks,
         List<BsDataConstraint> Constraints,
         List<BsDataModifierGroup> ModifierGroups,
+        List<BsDataCostTier> CostTiers,
         List<BsDataRule> Rules,
         List<BsDataCatalogueLink> CatalogueLinks)
         ParseCatalogueXml(string xml)
     {
         XDocument doc;
         try { doc = XDocument.Parse(xml); }
-        catch { return (null, [], [], [], [], [], [], [], [], []); }
+        catch { return (null, [], [], [], [], [], [], [], [], [], []); }
 
         var root = doc.Root;
-        if (root == null) return (null, [], [], [], [], [], [], [], [], []);
+        if (root == null) return (null, [], [], [], [], [], [], [], [], [], []);
 
         var id = root.Attribute("id")?.Value ?? "";
         var name = root.Attribute("name")?.Value ?? "";
@@ -289,6 +299,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         var entryLinks = new List<BsDataEntryLink>();
         var constraints = new List<BsDataConstraint>();
         var modifierGroups = new List<BsDataModifierGroup>();
+        var costTiers = new List<BsDataCostTier>();
         var rules = new List<BsDataRule>();
         var catalogueLinks = new List<BsDataCatalogueLink>();
         var seenUnitIds = new HashSet<string>();
@@ -298,7 +309,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .Element(Ns + "sharedSelectionEntries")
             ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
-            ExtractEntry(entry, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, seenUnitIds);
+            ExtractEntry(entry, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, seenUnitIds);
         }
 
         // Also parse top-level selectionEntries (force org slots, etc.)
@@ -306,7 +317,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .Element(Ns + "selectionEntries")
             ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
-            ExtractEntry(entry, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, seenUnitIds);
+            ExtractEntry(entry, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, seenUnitIds);
         }
 
         // Parse sharedRules (catalogue-level rules/abilities)
@@ -345,7 +356,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             });
         }
 
-        return (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, rules, catalogueLinks);
+        return (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, rules, catalogueLinks);
     }
 
     private static void ExtractRule(XElement rule, string catalogueId, List<BsDataRule> rules)
@@ -376,6 +387,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         List<BsDataEntryLink> entryLinks,
         List<BsDataConstraint> constraints,
         List<BsDataModifierGroup> modifierGroups,
+        List<BsDataCostTier> costTiers,
         HashSet<string> seenUnitIds,
         int depth = 0)
     {
@@ -584,12 +596,145 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             });
         }
 
+        // Extract cost tiers from direct <modifiers> (not inside <modifierGroups>).
+        // Units with multiple cost tiers have <modifier type="set" field="{pts_typeId}" value="...">
+        // with a condition on the number of models (field="selections" childId="model").
+        var ptsTypeId = entry
+            .Element(Ns + "costs")
+            ?.Elements(Ns + "cost")
+            .FirstOrDefault(c => (c.Attribute("name")?.Value ?? "").Contains("pts", StringComparison.OrdinalIgnoreCase))
+            ?.Attribute("typeId")?.Value;
+
+        if (points.HasValue && ptsTypeId != null)
+        {
+            var costMods = new List<(decimal NewCost, string CondType, int CondValue)>();
+
+            foreach (var mod in entry.Element(Ns + "modifiers")?.Elements(Ns + "modifier") ?? Enumerable.Empty<XElement>())
+            {
+                if (mod.Attribute("type")?.Value != "set") continue;
+                if (mod.Attribute("field")?.Value != ptsTypeId) continue;
+                if (!decimal.TryParse(mod.Attribute("value")?.Value,
+                        System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out var newCost)) continue;
+
+                var cond = mod.Element(Ns + "conditions")
+                    ?.Elements(Ns + "condition")
+                    .FirstOrDefault(c =>
+                        c.Attribute("field")?.Value == "selections" &&
+                        c.Attribute("childId")?.Value == "model");
+                if (cond == null) continue;
+
+                var condType = cond.Attribute("type")?.Value ?? "";
+                if (!int.TryParse(cond.Attribute("value")?.Value, out var condValue)) continue;
+
+                costMods.Add((newCost, condType, condValue));
+            }
+
+            if (costMods.Count > 0)
+            {
+                // Determine model min/max from selectionEntryGroups containing model entries.
+                // Direct model entries (e.g. a champion) contribute a fixed count.
+                int directModelMin = 0;
+                foreach (var se in entry.Element(Ns + "selectionEntries")
+                    ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
+                {
+                    if (se.Attribute("type")?.Value != "model") continue;
+                    foreach (var c in se.Element(Ns + "constraints")?.Elements(Ns + "constraint") ?? Enumerable.Empty<XElement>())
+                    {
+                        if (c.Attribute("field")?.Value == "selections" &&
+                            c.Attribute("type")?.Value == "min" &&
+                            int.TryParse(c.Attribute("value")?.Value, out var v))
+                            directModelMin += v;
+                    }
+                }
+
+                int? groupModelMin = null;
+                int? groupModelMax = null;
+                foreach (var seg in entry.Element(Ns + "selectionEntryGroups")
+                    ?.Elements(Ns + "selectionEntryGroup") ?? Enumerable.Empty<XElement>())
+                {
+                    bool hasModels = seg.Element(Ns + "selectionEntries")
+                        ?.Elements(Ns + "selectionEntry")
+                        .Any(se => se.Attribute("type")?.Value == "model") == true;
+                    if (!hasModels) continue;
+
+                    foreach (var c in seg.Element(Ns + "constraints")?.Elements(Ns + "constraint") ?? Enumerable.Empty<XElement>())
+                    {
+                        if (c.Attribute("field")?.Value != "selections") continue;
+                        if (!int.TryParse(c.Attribute("value")?.Value, out var v)) continue;
+                        if (c.Attribute("type")?.Value == "min")
+                            groupModelMin = groupModelMin.HasValue ? Math.Min(groupModelMin.Value, v) : v;
+                        if (c.Attribute("type")?.Value == "max")
+                            groupModelMax = groupModelMax.HasValue ? Math.Max(groupModelMax.Value, v) : v;
+                    }
+
+                    // Fall back to model-entry max if no group-level max
+                    if (!groupModelMax.HasValue)
+                    {
+                        foreach (var se in seg.Element(Ns + "selectionEntries")
+                            ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
+                        {
+                            if (se.Attribute("type")?.Value != "model") continue;
+                            foreach (var c in se.Element(Ns + "constraints")?.Elements(Ns + "constraint") ?? Enumerable.Empty<XElement>())
+                            {
+                                if (c.Attribute("field")?.Value == "selections" &&
+                                    c.Attribute("type")?.Value == "max" &&
+                                    int.TryParse(c.Attribute("value")?.Value, out var v))
+                                    groupModelMax = groupModelMax.HasValue ? Math.Max(groupModelMax.Value, v) : v;
+                            }
+                        }
+                    }
+                }
+
+                int? modelMin;
+                if (groupModelMin.HasValue)
+                    modelMin = directModelMin + groupModelMin.Value;
+                else if (directModelMin > 0)
+                    modelMin = directModelMin;
+                else
+                    modelMin = null;
+                int? modelMax = groupModelMax.HasValue ? directModelMin + groupModelMax.Value : null;
+
+                // Sort modifiers by ascending threshold and build tiers
+                costMods.Sort((a, b) => a.CondValue.CompareTo(b.CondValue));
+
+                decimal tierPts = points.Value;
+                int? tierMin = modelMin;
+
+                for (int i = 0; i < costMods.Count; i++)
+                {
+                    var (newCost, condType, condValue) = costMods[i];
+                    int threshold = condType == ConditionTypeGreaterThan ? condValue + 1 : condValue;
+
+                    costTiers.Add(new BsDataCostTier
+                    {
+                        UnitId = unitId,
+                        MinModels = tierMin,
+                        MaxModels = threshold - 1,
+                        Points = tierPts,
+                    });
+
+                    tierMin = threshold;
+                    tierPts = newCost;
+                }
+
+                // Final tier
+                costTiers.Add(new BsDataCostTier
+                {
+                    UnitId = unitId,
+                    MinModels = tierMin,
+                    MaxModels = modelMax,
+                    Points = tierPts,
+                });
+            }
+        }
+
         // Recursively extract nested selectionEntries (models, wargear options within a unit)
         foreach (var nested in entry
             .Element(Ns + "selectionEntries")
             ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
-            ExtractEntry(nested, catalogueId, unitId, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, seenUnitIds, depth + 1);
+            ExtractEntry(nested, catalogueId, unitId, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, seenUnitIds, depth + 1);
         }
 
         // Recursively extract selectionEntryGroups (groups of options)
@@ -597,7 +742,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .Element(Ns + "selectionEntryGroups")
             ?.Elements(Ns + "selectionEntryGroup") ?? Enumerable.Empty<XElement>())
         {
-            ExtractEntry(group, catalogueId, unitId, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, seenUnitIds, depth + 1);
+            ExtractEntry(group, catalogueId, unitId, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, seenUnitIds, depth + 1);
         }
     }
 }
