@@ -33,6 +33,8 @@ public class BsDataAdminController(BsDataDbContext db, BsDataImportService impor
         return Ok(new
         {
             catalogues = await db.Catalogues.CountAsync(),
+            catalogueLinks = await db.CatalogueLinks.CountAsync(),
+            rules = await db.Rules.CountAsync(),
             units = await db.Units.CountAsync(),
             profiles = await db.Profiles.CountAsync(),
             unitCategories = await db.UnitCategories.CountAsync(),

@@ -7,10 +7,18 @@ public class BsDataUnit
     [Key]
     public string Id { get; set; } = string.Empty;
     public string CatalogueId { get; set; } = string.Empty;
+    /// <summary>Parent entry id for nested selection entries (null for top-level).</summary>
+    public string? ParentId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? EntryType { get; set; }
-    public string? Points { get; set; }
+    public decimal? Points { get; set; }
     public bool Hidden { get; set; }
+    /// <summary>Whether this entry is collective (its children share one selection).</summary>
+    public bool Collective { get; set; }
+    /// <summary>Whether this entry is imported from another catalogue.</summary>
+    public bool Import { get; set; }
+    public string? PublicationId { get; set; }
+    public string? Page { get; set; }
     public int? MinInRoster { get; set; }
     public int? MaxInRoster { get; set; }
     public ICollection<BsDataUnitCategory> Categories { get; set; } = [];

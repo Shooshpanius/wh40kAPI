@@ -31,6 +31,8 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         int totalEntryLinks = 0;
         int totalConstraints = 0;
         int totalModifierGroups = 0;
+        int totalRules = 0;
+        int totalCatalogueLinks = 0;
 
         // Keep global seen sets to avoid adding entities with duplicate primary keys
         var seenCatalogueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -39,6 +41,8 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         var seenInfoLinkIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenEntryLinkIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var seenConstraintIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenRuleIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenCatalogueLinkIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         // 3. Process each .cat file
         foreach (var (fileName, downloadUrl) in catFiles)
@@ -47,7 +51,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             {
                 logger.LogInformation("Importing {File}", fileName);
                 var xml = await client.GetStringAsync(downloadUrl);
-                var (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups) = ParseCatalogueXml(xml);
+                var (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, rules, catalogueLinks) = ParseCatalogueXml(xml);
 
                 if (catalogue == null) continue;
 
@@ -125,6 +129,30 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 // filter only for accepted units.
                 var newModifierGroups = modifierGroups.Where(g => acceptedUnitIds.Contains(g.UnitId)).ToList();
 
+                var newRules = new List<BsDataRule>();
+                foreach (var r in rules)
+                {
+                    if (string.IsNullOrEmpty(r.Id)) continue;
+                    if (!seenRuleIds.Add(r.Id))
+                    {
+                        logger.LogDebug("Skipping duplicate rule {RuleId} from {File}", r.Id, fileName);
+                        continue;
+                    }
+                    newRules.Add(r);
+                }
+
+                var newCatalogueLinks = new List<BsDataCatalogueLink>();
+                foreach (var cl in catalogueLinks)
+                {
+                    if (string.IsNullOrEmpty(cl.Id)) continue;
+                    if (!seenCatalogueLinkIds.Add(cl.Id))
+                    {
+                        logger.LogDebug("Skipping duplicate catalogueLink {LinkId} from {File}", cl.Id, fileName);
+                        continue;
+                    }
+                    newCatalogueLinks.Add(cl);
+                }
+
                 if (newUnits.Count > 0)
                     db.Units.AddRange(newUnits);
 
@@ -146,6 +174,12 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 if (newModifierGroups.Count > 0)
                     db.ModifierGroups.AddRange(newModifierGroups);
 
+                if (newRules.Count > 0)
+                    db.Rules.AddRange(newRules);
+
+                if (newCatalogueLinks.Count > 0)
+                    db.CatalogueLinks.AddRange(newCatalogueLinks);
+
                 await db.SaveChangesAsync();
                 totalUnits += newUnits.Count;
                 totalProfiles += newProfiles.Count;
@@ -154,6 +188,8 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 totalEntryLinks += newEntryLinks.Count;
                 totalConstraints += newConstraints.Count;
                 totalModifierGroups += newModifierGroups.Count;
+                totalRules += newRules.Count;
+                totalCatalogueLinks += newCatalogueLinks.Count;
             }
             catch (Exception ex)
             {
@@ -162,8 +198,12 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             }
         }
 
-        logger.LogInformation("Import complete. Units: {TotalUnits}, Profiles: {TotalProfiles}, Categories: {TotalCategories}, InfoLinks: {TotalInfoLinks}, EntryLinks: {TotalEntryLinks}, Constraints: {TotalConstraints}, ModifierGroups: {TotalModifierGroups}",
-            totalUnits, totalProfiles, totalCategories, totalInfoLinks, totalEntryLinks, totalConstraints, totalModifierGroups);
+        logger.LogInformation(
+            "Import complete. Units: {TotalUnits}, Profiles: {TotalProfiles}, Categories: {TotalCategories}, " +
+            "InfoLinks: {TotalInfoLinks}, EntryLinks: {TotalEntryLinks}, Constraints: {TotalConstraints}, " +
+            "ModifierGroups: {TotalModifierGroups}, Rules: {TotalRules}, CatalogueLinks: {TotalCatalogueLinks}",
+            totalUnits, totalProfiles, totalCategories, totalInfoLinks, totalEntryLinks,
+            totalConstraints, totalModifierGroups, totalRules, totalCatalogueLinks);
         return totalUnits;
     }
 
@@ -195,21 +235,37 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         return files;
     }
 
-    private static (BsDataCatalogue? Catalogue, List<BsDataUnit> Units, List<BsDataProfile> Profiles, List<BsDataUnitCategory> Categories, List<BsDataInfoLink> InfoLinks, List<BsDataEntryLink> EntryLinks, List<BsDataConstraint> Constraints, List<BsDataModifierGroup> ModifierGroups)
+    private static (
+        BsDataCatalogue? Catalogue,
+        List<BsDataUnit> Units,
+        List<BsDataProfile> Profiles,
+        List<BsDataUnitCategory> Categories,
+        List<BsDataInfoLink> InfoLinks,
+        List<BsDataEntryLink> EntryLinks,
+        List<BsDataConstraint> Constraints,
+        List<BsDataModifierGroup> ModifierGroups,
+        List<BsDataRule> Rules,
+        List<BsDataCatalogueLink> CatalogueLinks)
         ParseCatalogueXml(string xml)
     {
         XDocument doc;
         try { doc = XDocument.Parse(xml); }
-        catch { return (null, [], [], [], [], [], [], []); }
+        catch { return (null, [], [], [], [], [], [], [], [], []); }
 
         var root = doc.Root;
-        if (root == null) return (null, [], [], [], [], [], [], []);
+        if (root == null) return (null, [], [], [], [], [], [], [], [], []);
 
         var id = root.Attribute("id")?.Value ?? "";
         var name = root.Attribute("name")?.Value ?? "";
         if (!int.TryParse(root.Attribute("revision")?.Value, out var revision))
             revision = 0;
         var library = string.Equals(root.Attribute("library")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+        var battleScribeVersion = root.Attribute("battleScribeVersion")?.Value;
+        var gameSystemId = root.Attribute("gameSystemId")?.Value;
+        var gameSystemRevision = int.TryParse(root.Attribute("gameSystemRevision")?.Value, out var gsRev) ? gsRev : (int?)null;
+        var authorName = root.Attribute("authorName")?.Value;
+        var authorContact = root.Attribute("authorContact")?.Value;
+        var authorUrl = root.Attribute("authorUrl")?.Value;
 
         var catalogue = new BsDataCatalogue
         {
@@ -217,6 +273,12 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             Name = name,
             Revision = revision,
             Library = library,
+            BattleScribeVersion = battleScribeVersion,
+            GameSystemId = gameSystemId,
+            GameSystemRevision = gameSystemRevision,
+            AuthorName = authorName,
+            AuthorContact = authorContact,
+            AuthorUrl = authorUrl,
             FetchedAt = DateTime.UtcNow,
         };
 
@@ -227,30 +289,86 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         var entryLinks = new List<BsDataEntryLink>();
         var constraints = new List<BsDataConstraint>();
         var modifierGroups = new List<BsDataModifierGroup>();
+        var rules = new List<BsDataRule>();
+        var catalogueLinks = new List<BsDataCatalogueLink>();
         var seenUnitIds = new HashSet<string>();
 
-        // Parse sharedSelectionEntries (top-level reusable units)
+        // Parse sharedSelectionEntries (top-level reusable units/models)
         foreach (var entry in root
             .Element(Ns + "sharedSelectionEntries")
             ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
-            ExtractEntry(entry, id, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, seenUnitIds);
+            ExtractEntry(entry, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, seenUnitIds);
         }
 
-        // Also parse top-level selectionEntries within forces (if present)
-        foreach (var force in root
-            .Element(Ns + "entryLinks")
-            ?.Elements(Ns + "entryLink") ?? Enumerable.Empty<XElement>())
+        // Also parse top-level selectionEntries (force org slots, etc.)
+        foreach (var entry in root
+            .Element(Ns + "selectionEntries")
+            ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
-            // entry links are references; we skip them to avoid duplicates
+            ExtractEntry(entry, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, seenUnitIds);
         }
 
-        return (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups);
+        // Parse sharedRules (catalogue-level rules/abilities)
+        foreach (var rule in root
+            .Element(Ns + "sharedRules")
+            ?.Elements(Ns + "rule") ?? Enumerable.Empty<XElement>())
+        {
+            ExtractRule(rule, id, rules);
+        }
+
+        // Also parse top-level rules
+        foreach (var rule in root
+            .Element(Ns + "rules")
+            ?.Elements(Ns + "rule") ?? Enumerable.Empty<XElement>())
+        {
+            ExtractRule(rule, id, rules);
+        }
+
+        // Parse catalogueLinks (dependencies on other catalogues)
+        foreach (var link in root
+            .Element(Ns + "catalogueLinks")
+            ?.Elements(Ns + "catalogueLink") ?? Enumerable.Empty<XElement>())
+        {
+            var linkId = link.Attribute("id")?.Value ?? "";
+            if (string.IsNullOrEmpty(linkId)) continue;
+            var targetId = link.Attribute("targetId")?.Value ?? "";
+            if (string.IsNullOrEmpty(targetId)) continue;
+            catalogueLinks.Add(new BsDataCatalogueLink
+            {
+                Id = linkId,
+                CatalogueId = id,
+                Name = link.Attribute("name")?.Value ?? "",
+                TargetId = targetId,
+                Type = link.Attribute("type")?.Value ?? "",
+                ImportRootEntries = string.Equals(link.Attribute("importRootEntries")?.Value, "true", StringComparison.OrdinalIgnoreCase),
+            });
+        }
+
+        return (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, rules, catalogueLinks);
+    }
+
+    private static void ExtractRule(XElement rule, string catalogueId, List<BsDataRule> rules)
+    {
+        var ruleId = rule.Attribute("id")?.Value ?? "";
+        if (string.IsNullOrEmpty(ruleId)) return;
+
+        rules.Add(new BsDataRule
+        {
+            Id = ruleId,
+            CatalogueId = catalogueId,
+            Name = rule.Attribute("name")?.Value ?? "",
+            Description = rule.Element(Ns + "description")?.Value,
+            Hidden = string.Equals(rule.Attribute("hidden")?.Value, "true", StringComparison.OrdinalIgnoreCase),
+            PublicationId = rule.Attribute("publicationId")?.Value,
+            Page = rule.Attribute("page")?.Value,
+        });
     }
 
     private static void ExtractEntry(
         XElement entry,
         string catalogueId,
+        string? parentId,
         List<BsDataUnit> units,
         List<BsDataProfile> profiles,
         List<BsDataUnitCategory> categories,
@@ -258,8 +376,10 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         List<BsDataEntryLink> entryLinks,
         List<BsDataConstraint> constraints,
         List<BsDataModifierGroup> modifierGroups,
-        HashSet<string> seenUnitIds)
+        HashSet<string> seenUnitIds,
+        int depth = 0)
     {
+        if (depth > 10) return;
         var unitId = entry.Attribute("id")?.Value ?? "";
         if (string.IsNullOrEmpty(unitId) || seenUnitIds.Contains(unitId)) return;
         seenUnitIds.Add(unitId);
@@ -267,14 +387,22 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         var unitName = entry.Attribute("name")?.Value ?? "";
         var entryType = entry.Attribute("type")?.Value;
         var hidden = string.Equals(entry.Attribute("hidden")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+        var collective = string.Equals(entry.Attribute("collective")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+        var import = string.Equals(entry.Attribute("import")?.Value, "true", StringComparison.OrdinalIgnoreCase);
+        var publicationId = entry.Attribute("publicationId")?.Value;
+        var page = entry.Attribute("page")?.Value;
 
         // Get points cost
-        var points = entry
+        decimal? points = null;
+        var pointsValue = entry
             .Element(Ns + "costs")
             ?.Elements(Ns + "cost")
             .Where(c => (c.Attribute("name")?.Value ?? "").Contains("pts", StringComparison.OrdinalIgnoreCase))
             .Select(c => c.Attribute("value")?.Value)
             .FirstOrDefault();
+        if (decimal.TryParse(pointsValue, System.Globalization.NumberStyles.Any,
+                System.Globalization.CultureInfo.InvariantCulture, out var parsedPoints))
+            points = parsedPoints;
 
         // Extract min/max roster quantities from top-level constraints
         int? minInRoster = null;
@@ -297,10 +425,15 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         {
             Id = unitId,
             CatalogueId = catalogueId,
+            ParentId = parentId,
             Name = unitName,
             EntryType = entryType,
             Points = points,
             Hidden = hidden,
+            Collective = collective,
+            Import = import,
+            PublicationId = publicationId,
+            Page = page,
             MinInRoster = minInRoster,
             MaxInRoster = maxInRoster,
         });
@@ -391,39 +524,25 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             });
         }
 
-        // Extract constraints directly from the entry's own constraints element only
-        var constraintSources = entry.Element(Ns + "constraints")?.Elements(Ns + "constraint") ?? Enumerable.Empty<XElement>();
-
-        foreach (var c in constraintSources)
+        // Extract constraints
+        foreach (var c in entry.Element(Ns + "constraints")?.Elements(Ns + "constraint") ?? Enumerable.Empty<XElement>())
         {
             var constraintId = c.Attribute("id")?.Value ?? "";
             if (string.IsNullOrEmpty(constraintId)) continue;
-            var field = c.Attribute("field")?.Value;
-            var scope = c.Attribute("scope")?.Value;
-            var value = c.Attribute("value")?.Value;
-            var percentValue = string.Equals(c.Attribute("percentValue")?.Value, "true", StringComparison.OrdinalIgnoreCase);
-            var shared = string.Equals(c.Attribute("shared")?.Value, "true", StringComparison.OrdinalIgnoreCase);
-            var includeChildSelections = string.Equals(c.Attribute("includeChildSelections")?.Value, "true", StringComparison.OrdinalIgnoreCase);
-            var includeChildForces = string.Equals(c.Attribute("includeChildForces")?.Value, "true", StringComparison.OrdinalIgnoreCase);
-            var childId = c.Attribute("childId")?.Value;
-            var type = c.Attribute("type")?.Value;
-
             constraints.Add(new BsDataConstraint
             {
                 Id = constraintId,
                 UnitId = unitId,
-                Field = field,
-                Scope = scope,
-                Value = value,
-                PercentValue = percentValue,
-                Shared = shared,
-                IncludeChildSelections = includeChildSelections,
-                IncludeChildForces = includeChildForces,
-                ChildId = childId,
-                Type = type,
+                Field = c.Attribute("field")?.Value,
+                Scope = c.Attribute("scope")?.Value,
+                Value = c.Attribute("value")?.Value,
+                PercentValue = string.Equals(c.Attribute("percentValue")?.Value, "true", StringComparison.OrdinalIgnoreCase),
+                Shared = string.Equals(c.Attribute("shared")?.Value, "true", StringComparison.OrdinalIgnoreCase),
+                IncludeChildSelections = string.Equals(c.Attribute("includeChildSelections")?.Value, "true", StringComparison.OrdinalIgnoreCase),
+                IncludeChildForces = string.Equals(c.Attribute("includeChildForces")?.Value, "true", StringComparison.OrdinalIgnoreCase),
+                ChildId = c.Attribute("childId")?.Value,
+                Type = c.Attribute("type")?.Value,
             });
-
-
         }
 
         // Extract modifierGroups
@@ -463,6 +582,22 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 Modifiers = modifiers is { Count: > 0 } ? JsonSerializer.Serialize(modifiers) : null,
                 Conditions = conditions is { Count: > 0 } ? JsonSerializer.Serialize(conditions) : null,
             });
+        }
+
+        // Recursively extract nested selectionEntries (models, wargear options within a unit)
+        foreach (var nested in entry
+            .Element(Ns + "selectionEntries")
+            ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
+        {
+            ExtractEntry(nested, catalogueId, unitId, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, seenUnitIds, depth + 1);
+        }
+
+        // Recursively extract selectionEntryGroups (groups of options)
+        foreach (var group in entry
+            .Element(Ns + "selectionEntryGroups")
+            ?.Elements(Ns + "selectionEntryGroup") ?? Enumerable.Empty<XElement>())
+        {
+            ExtractEntry(group, catalogueId, unitId, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, seenUnitIds, depth + 1);
         }
     }
 }
