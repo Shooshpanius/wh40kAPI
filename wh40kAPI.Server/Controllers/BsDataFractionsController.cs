@@ -79,6 +79,43 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     }
 
     /// <summary>
+    /// Returns all units belonging to the fraction arranged as a hierarchy.
+    /// Same data as /unitsWithCosts but nested by parentId — entries whose parentId
+    /// is null are returned as root nodes; their children are embedded recursively.
+    /// </summary>
+    [HttpGet("{id}/unitsTree")]
+    public async Task<ActionResult<IEnumerable<BsDataUnitNode>>> GetUnitsTree(string id)
+    {
+        if (!await db.Catalogues.AnyAsync(c => c.Id == id && !c.Library))
+            return NotFound();
+
+        var catalogueIds = await CollectCatalogueIdsAsync(id);
+
+        var units = await db.Units.AsNoTracking()
+            .Include(u => u.Categories.Where(c => c.Primary))
+            .Include(u => u.InfoLinks)
+            .Include(u => u.EntryLinks)
+            .Include(u => u.CostTiers)
+            .Where(u => catalogueIds.Contains(u.CatalogueId))
+            .OrderBy(u => u.Name)
+            .ToListAsync();
+
+        // Convert every unit to a node and index by id for O(1) child lookup.
+        var nodeById = units.ToDictionary(u => u.Id, BsDataUnitNode.FromUnit);
+
+        var roots = new List<BsDataUnitNode>();
+        foreach (var node in nodeById.Values)
+        {
+            if (node.ParentId is not null && nodeById.TryGetValue(node.ParentId, out var parent))
+                parent.Children.Add(node);
+            else
+                roots.Add(node);
+        }
+
+        return Ok(roots);
+    }
+
+    /// <summary>
     /// Collects all catalogue IDs reachable from <paramref name="rootId"/>
     /// by following catalogueLinks recursively.
     /// Loads all catalogue links in a single query then traverses them in memory.
