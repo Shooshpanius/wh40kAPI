@@ -55,6 +55,30 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     }
 
     /// <summary>
+    /// Returns all units belonging to the fraction with populated cost-tier information.
+    /// Same as /units but each unit also includes its CostTiers (points cost per squad size).
+    /// </summary>
+    [HttpGet("{id}/unitsWithCosts")]
+    public async Task<ActionResult<IEnumerable<BsDataUnit>>> GetUnitsWithCosts(string id)
+    {
+        if (!await db.Catalogues.AnyAsync(c => c.Id == id && !c.Library))
+            return NotFound();
+
+        var catalogueIds = await CollectCatalogueIdsAsync(id);
+
+        var units = await db.Units.AsNoTracking()
+            .Include(u => u.Categories.Where(c => c.Primary))
+            .Include(u => u.InfoLinks)
+            .Include(u => u.EntryLinks)
+            .Include(u => u.CostTiers)
+            .Where(u => catalogueIds.Contains(u.CatalogueId))
+            .OrderBy(u => u.Name)
+            .ToListAsync();
+
+        return Ok(units);
+    }
+
+    /// <summary>
     /// Collects all catalogue IDs reachable from <paramref name="rootId"/>
     /// by following catalogueLinks recursively.
     /// Loads all catalogue links in a single query then traverses them in memory.
