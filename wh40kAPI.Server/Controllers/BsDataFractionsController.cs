@@ -82,6 +82,8 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     /// Returns all units belonging to the fraction arranged as a hierarchy.
     /// Same data as /unitsWithCosts but nested by parentId — entries whose parentId
     /// is null are returned as root nodes; their children are embedded recursively.
+    /// Entry links are resolved: entries reachable only via entryLinks are embedded
+    /// as children of the linking node rather than appearing as separate root nodes.
     /// </summary>
     [HttpGet("{id}/unitsTree")]
     public async Task<ActionResult<IEnumerable<BsDataUnitNode>>> GetUnitsTree(string id)
@@ -103,13 +105,37 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
         // Convert every unit to a node and index by id for O(1) child lookup.
         var nodeById = units.ToDictionary(u => u.Id, BsDataUnitNode.FromUnit);
 
+        // Collect all entry-link target IDs that are present in our node set.
+        // Such entries are embedded as children of the linking node and should
+        // not appear as independent root nodes.
+        // This is O(total entryLinks across all units), which is well within the
+        // scale of BSData catalogue data.
+        var entryLinkTargets = new HashSet<string>(
+            units.SelectMany(u => u.EntryLinks.Select(l => l.TargetId)),
+            StringComparer.OrdinalIgnoreCase);
+
         var roots = new List<BsDataUnitNode>();
         foreach (var node in nodeById.Values)
         {
             if (node.ParentId is not null && nodeById.TryGetValue(node.ParentId, out var parent))
                 parent.Children.Add(node);
-            else
+            else if (!entryLinkTargets.Contains(node.Id))
                 roots.Add(node);
+            // else: shared entry reachable only via entryLinks — attached below
+        }
+
+        // Resolve entry links: attach each linked entry as a child of the linking node.
+        foreach (var node in nodeById.Values)
+        {
+            foreach (var link in node.EntryLinks)
+            {
+                if (!nodeById.TryGetValue(link.TargetId, out var target)) continue;
+                // Guard against trivial self-reference and immediate-parent cycle.
+                // Deeper transitive cycles (A→B→C→A) are handled gracefully at
+                // serialization time by ReferenceHandler.IgnoreCycles.
+                if (target.Id == node.Id || target.Id == node.ParentId) continue;
+                node.Children.Add(target);
+            }
         }
 
         return Ok(roots);
