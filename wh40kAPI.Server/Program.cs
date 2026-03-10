@@ -71,7 +71,10 @@ builder.Services.AddHttpClient("github", client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd("wh40kAPI/1.0");
     client.Timeout = TimeSpan.FromMinutes(10);
 });
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+        options.JsonSerializerOptions.ReferenceHandler =
+            System.Text.Json.Serialization.ReferenceHandler.IgnoreCycles);
 builder.Services.AddOpenApi("wh40k", options =>
 {
     options.ShouldInclude = (desc) => desc.GroupName == "wh40k";

@@ -312,6 +312,14 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             ExtractEntry(entry, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, seenUnitIds);
         }
 
+        // Parse sharedSelectionEntryGroups (top-level reusable option groups)
+        foreach (var group in root
+            .Element(Ns + "sharedSelectionEntryGroups")
+            ?.Elements(Ns + "selectionEntryGroup") ?? Enumerable.Empty<XElement>())
+        {
+            ExtractEntry(group, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, seenUnitIds);
+        }
+
         // Also parse top-level selectionEntries (force org slots, etc.)
         foreach (var entry in root
             .Element(Ns + "selectionEntries")
