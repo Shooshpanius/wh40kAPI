@@ -406,6 +406,10 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
 
         var unitName = entry.Attribute("name")?.Value ?? "";
         var entryType = entry.Attribute("type")?.Value;
+        // <selectionEntryGroup> elements carry no "type" XML attribute; label them explicitly
+        // so that API consumers can distinguish them from regular selectionEntry nodes.
+        if (entryType is null && entry.Name.LocalName == "selectionEntryGroup")
+            entryType = "selectionEntryGroup";
         var hidden = string.Equals(entry.Attribute("hidden")?.Value, "true", StringComparison.OrdinalIgnoreCase);
         var collective = string.Equals(entry.Attribute("collective")?.Value, "true", StringComparison.OrdinalIgnoreCase);
         var import = string.Equals(entry.Attribute("import")?.Value, "true", StringComparison.OrdinalIgnoreCase);
@@ -671,9 +675,9 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                         if (c.Attribute("field")?.Value != "selections") continue;
                         if (!int.TryParse(c.Attribute("value")?.Value, out var v)) continue;
                         if (c.Attribute("type")?.Value == "min")
-                            groupModelMin = groupModelMin.HasValue ? Math.Min(groupModelMin.Value, v) : v;
+                            groupModelMin = (groupModelMin ?? 0) + v;
                         if (c.Attribute("type")?.Value == "max")
-                            groupModelMax = groupModelMax.HasValue ? Math.Max(groupModelMax.Value, v) : v;
+                            groupModelMax = (groupModelMax ?? 0) + v;
                     }
 
                     // Fall back to model-entry max if no group-level max
@@ -734,6 +738,67 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                     MaxModels = modelMax,
                     Points = tierPts,
                 });
+            }
+            else if (points.Value > 0)
+            {
+                // No cost-altering modifiers on the unit.  Units like Skitarii Rangers/Vanguard
+                // have a fixed base cost and a fixed model count expressed entirely through a
+                // selectionEntryGroup (no modifier conditions).  Emit a single cost tier so
+                // that model-count information remains accessible via the cost-tiers endpoint.
+                int directModelMin = 0;
+                foreach (var se in entry.Element(Ns + "selectionEntries")
+                    ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
+                {
+                    if (se.Attribute("type")?.Value != "model") continue;
+                    foreach (var c in se.Element(Ns + "constraints")?.Elements(Ns + "constraint") ?? Enumerable.Empty<XElement>())
+                    {
+                        if (c.Attribute("field")?.Value == "selections" &&
+                            c.Attribute("type")?.Value == "min" &&
+                            int.TryParse(c.Attribute("value")?.Value, out var v))
+                            directModelMin += v;
+                    }
+                }
+
+                int? groupModelMin = null;
+                int? groupModelMax = null;
+                foreach (var seg in entry.Element(Ns + "selectionEntryGroups")
+                    ?.Elements(Ns + "selectionEntryGroup") ?? Enumerable.Empty<XElement>())
+                {
+                    bool hasModels = seg.Element(Ns + "selectionEntries")
+                        ?.Elements(Ns + "selectionEntry")
+                        .Any(se => se.Attribute("type")?.Value == "model") == true;
+                    if (!hasModels) continue;
+
+                    foreach (var c in seg.Element(Ns + "constraints")?.Elements(Ns + "constraint") ?? Enumerable.Empty<XElement>())
+                    {
+                        if (c.Attribute("field")?.Value != "selections") continue;
+                        if (!int.TryParse(c.Attribute("value")?.Value, out var v)) continue;
+                        if (c.Attribute("type")?.Value == "min")
+                            groupModelMin = (groupModelMin ?? 0) + v;
+                        if (c.Attribute("type")?.Value == "max")
+                            groupModelMax = (groupModelMax ?? 0) + v;
+                    }
+                }
+
+                if (groupModelMin.HasValue || groupModelMax.HasValue)
+                {
+                    int? modelMin;
+                    if (groupModelMin.HasValue)
+                        modelMin = directModelMin + groupModelMin.Value;
+                    else if (directModelMin > 0)
+                        modelMin = directModelMin;
+                    else
+                        modelMin = null;
+                    int? modelMax = groupModelMax.HasValue ? directModelMin + groupModelMax.Value : null;
+
+                    costTiers.Add(new BsDataCostTier
+                    {
+                        UnitId = unitId,
+                        MinModels = modelMin,
+                        MaxModels = modelMax,
+                        Points = points.Value,
+                    });
+                }
             }
         }
 
