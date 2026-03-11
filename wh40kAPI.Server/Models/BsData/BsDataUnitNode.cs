@@ -26,6 +26,7 @@ public class BsDataUnitNode
     public ICollection<BsDataInfoLink> InfoLinks { get; set; } = [];
     public ICollection<BsDataEntryLink> EntryLinks { get; set; } = [];
     public ICollection<BsDataCostTier> CostTiers { get; set; } = [];
+    public ICollection<BsDataModifierGroup> ModifierGroups { get; set; } = [];
     /// <summary>Direct children of this entry in the selection-entry hierarchy.</summary>
     public ICollection<BsDataUnitNode> Children { get; set; } = [];
 
@@ -48,5 +49,6 @@ public class BsDataUnitNode
         InfoLinks = unit.InfoLinks,
         EntryLinks = unit.EntryLinks,
         CostTiers = unit.CostTiers,
+        ModifierGroups = unit.ModifierGroups,
     };
 }

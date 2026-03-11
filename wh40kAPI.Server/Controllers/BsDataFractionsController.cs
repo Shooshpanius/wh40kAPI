@@ -98,6 +98,7 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             .Include(u => u.InfoLinks)
             .Include(u => u.EntryLinks)
             .Include(u => u.CostTiers)
+            .Include(u => u.ModifierGroups)
             .Where(u => catalogueIds.Contains(u.CatalogueId))
             .OrderBy(u => u.Name)
             .ToListAsync();
