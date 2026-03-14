@@ -151,12 +151,12 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
         if (!await db.Catalogues.AnyAsync(c => c.Id == id && !c.Library))
             return NotFound();
 
-        var catalogueIds = await CollectCatalogueIdsAsync(id);
-
         // Step 1: root Detachment nodes: entryType="upgrade", parentId=null, category="Configuration"
+        // Only search the fraction's own catalogue to avoid picking up detachments
+        // from linked shared catalogues (e.g. generic CSM detachments appearing for Death Guard).
         var detachmentRootIds = await db.Units
             .AsNoTracking()
-            .Where(u => catalogueIds.Contains(u.CatalogueId)
+            .Where(u => u.CatalogueId == id
                      && u.EntryType == "upgrade"
                      && u.ParentId == null
                      && u.Categories.Any(c => c.Name == "Configuration"))
