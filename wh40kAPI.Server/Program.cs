@@ -1,6 +1,8 @@
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
+using System.Net;
 using System.Threading.RateLimiting;
 using wh40kAPI.Server.Data;
 using wh40kAPI.Server.Services;
@@ -75,6 +77,18 @@ builder.Services.AddHttpClient("github", client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd("wh40kAPI/1.0");
     client.Timeout = TimeSpan.FromMinutes(10);
 });
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Trust only the nginx container on the internal Docker network.
+    // Clear the default loopback-only trust so the Docker subnet is accepted.
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+    options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("172.16.0.0"), 12));
+    options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("10.0.0.0"), 8));
+    options.KnownIPNetworks.Add(new System.Net.IPNetwork(IPAddress.Parse("192.168.0.0"), 16));
+});
+
 builder.Services.AddRateLimiter(options =>
 {
     options.AddPolicy("admin", context =>
@@ -147,6 +161,9 @@ using (var scope = app.Services.CreateScope())
 app.UseDefaultFiles();
 app.MapStaticAssets();
 
+// Must be first — rewrites RemoteIpAddress from X-Forwarded-For before any middleware reads it
+app.UseForwardedHeaders();
+
 // Security headers for all responses
 app.Use(async (context, next) =>
 {
@@ -167,8 +184,8 @@ if (app.Environment.IsDevelopment())
     app.MapScalarApiReference("/scalar/ktbsdata", options => options.AddDocument("ktbsdata", "BSData Kill Team"));
 }
 
-app.UseAuthorization();
 app.UseRateLimiter();
+app.UseAuthorization();
 
 app.MapControllers();
 
