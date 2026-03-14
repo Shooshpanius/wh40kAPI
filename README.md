@@ -1,155 +1,215 @@
 # wh40kAPI
 
-A Warhammer 40,000 10th Edition API with a React frontend.
+[![.NET](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet&logoColor=white)](https://dotnet.microsoft.com/)
+[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![MariaDB](https://img.shields.io/badge/MariaDB-003545?logo=mariadb&logoColor=white)](https://mariadb.org/)
+[![Docker](https://img.shields.io/badge/Docker-готов-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
+[![Лицензия: GPL v3](https://img.shields.io/badge/Лицензия-GPLv3-blue.svg)](LICENSE.txt)
+[![GitHub stars](https://img.shields.io/github/stars/Shooshpanius/wh40kAPI?style=social)](https://github.com/Shooshpanius/wh40kAPI/stargazers)
+[![GitHub issues](https://img.shields.io/github/issues/Shooshpanius/wh40kAPI)](https://github.com/Shooshpanius/wh40kAPI/issues)
+[![GitHub последний коммит](https://img.shields.io/github/last-commit/Shooshpanius/wh40kAPI)](https://github.com/Shooshpanius/wh40kAPI/commits)
 
-## Features
+Full-stack **API для Warhammer 40,000 10-го издания** на базе ASP.NET Core 10 и React 19. Объединяет официальные данные WH40K и сообщественные источники [BSData](https://github.com/BSData) (40K и Kill Team) в единый REST API с интерактивной документацией OpenAPI.
 
-- **REST API** for all WH40K data: Factions, Datasheets, Abilities, Detachments, Stratagems, Enhancements, Sources
-- **Swagger UI** via Scalar — three separate API docs:
+## Возможности
+
+- **Три REST API** — WH40K 10-е издание, BSData 40K и BSData Kill Team — каждый со своей документацией [Scalar](https://scalar.com/) OpenAPI:
   - WH40K API: `/scalar/wh40k`
-  - BSData 40k: `/scalar/bsdata`
+  - BSData 40K: `/scalar/bsdata`
   - BSData Kill Team: `/scalar/ktbsdata`
-- **Admin panel** (frontend at `/admin`) for uploading `Data.rar` to populate the database
-- **MariaDB database** (schema auto-created on first run via EF Core `EnsureCreated`)
+- **Панель администратора** на React (`/admin`) — загрузка официального `Data.rar` и импорт данных сообщества с GitHub
+- **Три базы данных MariaDB** — схема создаётся автоматически при первом запуске через EF Core `EnsureCreated`
+- **Готов к Docker** — многоэтапные сборки для бэкенда (.NET) и фронтенда (Nginx)
 
-## Getting Started
+## Архитектура
 
-### Requirements
+```
+┌─────────────────────────────────────────────────────────────┐
+│                        wh40kAPI                             │
+├──────────────────────┬──────────────────────────────────────┤
+│   Фронтенд (SPA)     │        Бэкенд (ASP.NET Core 10)      │
+│   React 19 + Vite    │                                       │
+│   TypeScript         │  /api/wh40k/      – официальные      │
+│   React Router DOM   │  /api/bsdata/     – BSData 40K       │
+│   /admin панель      │  /api/ktbsdata/   – BSData Kill Team │
+│   :51018 (дев)       │  :8080 / :8081                       │
+└──────────────────────┴────────────────────┬─────────────────┘
+                                             │ EF Core + Pomelo
+                               ┌─────────────▼─────────────────┐
+                               │   MariaDB (3 базы данных)      │
+                               │   wh40k          (официальная) │
+                               │   wh40kBSData    (40K)         │
+                               │   wh40kKTBSData  (Kill Team)   │
+                               └───────────────────────────────┘
+```
+
+## Источники данных
+
+| API | Источник | Способ импорта |
+|-----|----------|----------------|
+| WH40K 10-е издание | Официальный архив `Data.rar` | Загрузка через панель администратора |
+| BSData 40K | [BSData/wh40k-10e](https://github.com/BSData/wh40k-10e) на GitHub | Запуск через панель администратора |
+| BSData Kill Team | [BSData/wh40k-killteam](https://github.com/BSData/wh40k-killteam) на GitHub | Запуск через панель администратора |
+
+## Технологический стек
+
+| Слой | Технология |
+|------|------------|
+| Фреймворк бэкенда | ASP.NET Core 10 |
+| ORM | Entity Framework Core 9 + Pomelo (MariaDB/MySQL) |
+| Документация API | Scalar (OpenAPI) |
+| Фронтенд | React 19 + TypeScript 5 + Vite 7 |
+| Маршрутизация | React Router DOM 7 |
+| База данных | MariaDB (3 отдельные БД) |
+| Работа с архивами | SharpCompress (`.rar` / `.zip`) |
+| Разбор CSV | CsvHelper |
+| Контейнеризация | Docker (многоэтапные сборки для бэкенда и фронтенда) |
+
+## Начало работы
+
+### Требования
 - .NET 10 SDK
 - Node.js 20+
-- **MariaDB** (or MySQL-compatible) server
+- Сервер **MariaDB** (или совместимый с MySQL)
 
-### Database Setup
+### Настройка базы данных
 
-Create the databases and a dedicated user in MariaDB:
+Создайте базы данных и отдельного пользователя в MariaDB:
 
 ```sql
 CREATE DATABASE wh40k CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE wh40kBSData CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 CREATE DATABASE wh40kKTBSData CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'wh40k'@'localhost' IDENTIFIED BY 'your_strong_password';
+CREATE USER 'wh40k'@'localhost' IDENTIFIED BY 'ваш_надёжный_пароль';
 GRANT ALL PRIVILEGES ON wh40k.* TO 'wh40k'@'localhost';
 GRANT ALL PRIVILEGES ON wh40kBSData.* TO 'wh40k'@'localhost';
 GRANT ALL PRIVILEGES ON wh40kKTBSData.* TO 'wh40k'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-### Configuration
-**Never commit real credentials to the repository.**
+### Конфигурация
+**Никогда не коммитьте реальные учётные данные в репозиторий.**
 
-#### Option 1: Local development file (recommended for local dev)
+#### Вариант 1: Локальный файл настроек (рекомендуется для разработки)
 
-Copy the example file and fill in your values:
+Скопируйте файл-пример и заполните свои значения:
 
 ```sh
 cp wh40kAPI.Server/appsettings.Development.json.example wh40kAPI.Server/appsettings.Development.json
-# Then edit appsettings.Development.json — this file is in .gitignore and will not be committed
+# Затем отредактируйте appsettings.Development.json — этот файл в .gitignore и не попадёт в коммит
 ```
 
-#### Option 2: .NET User Secrets (development only)
+#### Вариант 2: .NET User Secrets (только для разработки)
 
 ```sh
 cd wh40kAPI.Server
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" \
-  "Server=localhost;Port=3306;Database=wh40k;User=wh40k;Password=your_real_password;"
-dotnet user-secrets set "AdminAuth:PasswordHash" "your_sha256_hash"
+  "Server=localhost;Port=3306;Database=wh40k;User=wh40k;Password=ваш_реальный_пароль;"
+dotnet user-secrets set "AdminAuth:PasswordHash" "ваш_sha256_хеш"
 ```
 
-#### Option 3: Environment variables (any environment)
+#### Вариант 3: Переменные окружения (любое окружение)
 
 ```sh
-export ConnectionStrings__DefaultConnection="Server=localhost;Port=3306;Database=wh40k;User=wh40k;Password=your_real_password;"
-export ConnectionStrings__BsDataConnection="Server=localhost;Port=3306;Database=wh40kBSData;User=wh40k;Password=your_real_password;"
-export ConnectionStrings__KtBsDataConnection="Server=localhost;Port=3306;Database=wh40kKTBSData;User=wh40k;Password=your_real_password;"
-export AdminAuth__PasswordHash="your_sha256_hash"
+export ConnectionStrings__DefaultConnection="Server=localhost;Port=3306;Database=wh40k;User=wh40k;Password=ваш_реальный_пароль;"
+export ConnectionStrings__BsDataConnection="Server=localhost;Port=3306;Database=wh40kBSData;User=wh40k;Password=ваш_реальный_пароль;"
+export ConnectionStrings__KtBsDataConnection="Server=localhost;Port=3306;Database=wh40kKTBSData;User=wh40k;Password=ваш_реальный_пароль;"
+export AdminAuth__PasswordHash="ваш_sha256_хеш"
 ```
 
-### Run
+### Запуск
 ```sh
 cd wh40kAPI.Server
 dotnet run
 ```
 
-The app will be available at `https://localhost:51018` (Vite dev server).
+Приложение будет доступно по адресу `https://localhost:51018` (Vite dev server).
 
-## Admin Panel
+## Панель администратора
 
-The admin panel is protected by a password sent as the `X-Admin-Password` header.
+Панель администратора защищена паролем, передаваемым в заголовке `X-Admin-Password`.
 
-Set a strong password of your choice. Compute its SHA-256 hash and put it into `AdminAuth:PasswordHash`
-(via `appsettings.Development.json`, user secrets, or an environment variable — **not** directly in `appsettings.json`).
+Придумайте надёжный пароль, вычислите его SHA-256 хеш и поместите его в `AdminAuth:PasswordHash`
+(через `appsettings.Development.json`, user secrets или переменную окружения — **не** напрямую в `appsettings.json`).
 
-> **Note**: The admin password hash and the database password are separate.
-> The connection strings always use the **plain-text** database password.
-> Only `AdminAuth:PasswordHash` requires a SHA-256 hash.
+> **Важно**: хеш пароля администратора и пароль базы данных — это разные вещи.
+> В строках подключения всегда используется **открытый** пароль к БД.
+> SHA-256 хеш нужен только для `AdminAuth:PasswordHash`.
 
-To compute the hash of your password:
+Как вычислить хеш пароля:
 
 ```sh
-# Linux/macOS — copy only the hex string, not the trailing "  -" that sha256sum appends
-echo -n "your_password" | sha256sum | awk '{print $1}'
+# Linux/macOS — скопируйте только hex-строку, без "  -" в конце вывода sha256sum
+echo -n "ваш_пароль" | sha256sum | awk '{print $1}'
 
 # PowerShell
-[System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes("your_password"))).ToLower()
+[System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes("ваш_пароль"))).ToLower()
 ```
 
-### Changing the admin password
+### Смена пароля администратора
 
-1. Compute the SHA-256 hash of the new password (see above).
-2. Update `AdminAuth:PasswordHash` in your configuration (`appsettings.Development.json`, user secrets, or the `AdminAuth__PasswordHash` environment variable).
-3. **Restart the server** for the new hash to take effect.
+1. Вычислите SHA-256 хеш нового пароля (см. выше).
+2. Обновите `AdminAuth:PasswordHash` в конфигурации (`appsettings.Development.json`, user secrets или переменная окружения `AdminAuth__PasswordHash`).
+3. **Перезапустите сервер**, чтобы изменения вступили в силу.
 
-> **Troubleshooting "Cannot reach the server" / connection errors**
+> **Устранение неполадок: «Сервер недоступен» / ошибки подключения**
 >
-> If the server is not responding after a configuration change:
-> - Verify the server process is actually running (`dotnet run` or your container).
-> - Check the server logs for startup errors — a wrong connection string will be logged as a warning and the server will still start, but database operations will fail.
-> - Double-check that the `Password=` field in the connection strings contains the **plain-text** database password, not a hash.
-> - Make sure you are editing the correct config file for your environment (see [Configuration](#configuration) above).
+> Если сервер не отвечает после изменения конфигурации:
+> - Убедитесь, что процесс сервера действительно запущен (`dotnet run` или ваш контейнер).
+> - Проверьте логи сервера при запуске — неверная строка подключения будет залогирована как предупреждение, сервер запустится, но операции с БД будут падать.
+> - Убедитесь, что в поле `Password=` строк подключения указан **открытый** пароль к БД, а не хеш.
+> - Убедитесь, что вы редактируете правильный файл конфигурации для вашего окружения (см. [Конфигурация](#конфигурация)).
 
 
-## API Endpoints
+## Эндпоинты API
 
 ### WH40K API (`/api/wh40k/`)
 
-| Endpoint | Description |
+| Эндпоинт | Описание |
 |---|---|
-| `GET /api/wh40k/factions` | All factions |
-| `GET /api/wh40k/datasheets?factionId=SM` | Datasheets (filter by faction) |
-| `GET /api/wh40k/datasheets/{id}/models` | Models for a datasheet |
-| `GET /api/wh40k/datasheets/{id}/wargear` | Wargear for a datasheet |
-| `GET /api/wh40k/abilities?factionId=SM` | Abilities |
-| `GET /api/wh40k/detachments?factionId=SM` | Detachments |
-| `GET /api/wh40k/strategems?factionId=SM` | Stratagems |
-| `GET /api/wh40k/enhancements?factionId=SM` | Enhancements |
-| `GET /api/wh40k/source` | Source books |
-| `POST /api/wh40k/admin/upload` | Upload Data.rar (requires X-Admin-Password header) |
-| `GET /api/wh40k/admin/status` | Database status (requires X-Admin-Password header) |
+| `GET /api/wh40k/factions` | Все фракции |
+| `GET /api/wh40k/datasheets?factionId=SM` | Датащиты (фильтр по фракции — необязателен) |
+| `GET /api/wh40k/datasheets/{id}` | Один датащит |
+| `GET /api/wh40k/datasheets/{id}/abilities` | Способности датащита |
+| `GET /api/wh40k/datasheets/{id}/models` | Модели датащита |
+| `GET /api/wh40k/datasheets/{id}/wargear` | Снаряжение датащита |
+| `GET /api/wh40k/abilities?factionId=SM` | Способности (фильтр по фракции — необязателен) |
+| `GET /api/wh40k/detachments?factionId=SM` | Отряды (фильтр по фракции — необязателен) |
+| `GET /api/wh40k/strategems?factionId=SM` | Стратагемы (фильтр по фракции — необязателен) |
+| `GET /api/wh40k/enhancements?factionId=SM` | Улучшения (фильтр по фракции — необязателен) |
+| `GET /api/wh40k/source` | Книги-источники |
+| `POST /api/wh40k/admin/upload` | Загрузить `Data.rar` *(требует заголовок `X-Admin-Password`, макс. 50 МБ)* |
+| `GET /api/wh40k/admin/status` | Статус базы данных *(требует заголовок `X-Admin-Password`)* |
 
 ### BSData WH40K API (`/api/bsdata/`)
 
-| Endpoint | Description |
+| Эндпоинт | Описание |
 |---|---|
-| `GET /api/bsdata/catalogues` | All catalogues |
-| `GET /api/bsdata/catalogues/{id}/units` | Units for a catalogue |
-| `GET /api/bsdata/catalogues/{id}/rules` | Shared rules/abilities for a catalogue |
-| `GET /api/bsdata/catalogues/{id}/links` | Catalogue dependency links |
-| `GET /api/bsdata/units` | All units (filter by `catalogueId`) |
-| `GET /api/bsdata/units/{id}/profiles` | Profiles for a unit |
-| `GET /api/bsdata/units/{id}/categories` | Categories for a unit |
-| `GET /api/bsdata/units/{id}/infolinks` | Info links for a unit (rules, abilities, etc.) |
-| `GET /api/bsdata/units/{id}/entrylinks` | Entry links for a unit (wargear, options, etc.) |
-| `POST /api/bsdata/admin/import` | Import from BSData/wh40k-10e (requires X-Admin-Password header) |
-| `GET /api/bsdata/admin/status` | BSData database status (requires X-Admin-Password header) |
+| `GET /api/bsdata/catalogues` | Все каталоги |
+| `GET /api/bsdata/catalogues/{id}` | Один каталог |
+| `GET /api/bsdata/catalogues/{id}/units` | Юниты каталога |
+| `GET /api/bsdata/catalogues/{id}/rules` | Общие правила/способности каталога |
+| `GET /api/bsdata/catalogues/{id}/links` | Зависимости каталога |
+| `GET /api/bsdata/units?catalogueId={id}` | Все юниты (фильтр по каталогу — необязателен) |
+| `GET /api/bsdata/units/{id}` | Один юнит |
+| `GET /api/bsdata/units/{id}/profiles` | Профили юнита |
+| `GET /api/bsdata/units/{id}/categories` | Категории юнита |
+| `GET /api/bsdata/units/{id}/infolinks` | Информационные ссылки юнита (правила, способности и т.д.) |
+| `GET /api/bsdata/units/{id}/entrylinks` | Ссылки на вхождения юнита (снаряжение, опции и т.д.) |
+| `POST /api/bsdata/admin/import` | Импорт из BSData/wh40k-10e на GitHub *(требует заголовок `X-Admin-Password`)* |
+| `GET /api/bsdata/admin/status` | Статус базы BSData *(требует заголовок `X-Admin-Password`)* |
 
 ### BSData Kill Team API (`/api/ktbsdata/`)
 
-| Endpoint | Description |
+| Эндпоинт | Описание |
 |---|---|
-| `GET /api/ktbsdata/catalogues` | All Kill Team catalogues |
-| `GET /api/ktbsdata/catalogues/{id}/units` | Units for a catalogue |
-| `GET /api/ktbsdata/units` | All units (filter by `catalogueId`) |
-| `GET /api/ktbsdata/units/{id}/profiles` | Profiles for a unit |
-| `POST /api/ktbsdata/admin/import` | Import from BSData/wh40k-killteam (requires X-Admin-Password header) |
-| `GET /api/ktbsdata/admin/status` | Kill Team BSData database status (requires X-Admin-Password header) |
+| `GET /api/ktbsdata/catalogues` | Все каталоги Kill Team |
+| `GET /api/ktbsdata/catalogues/{id}` | Один каталог |
+| `GET /api/ktbsdata/catalogues/{id}/units` | Юниты каталога |
+| `GET /api/ktbsdata/units?catalogueId={id}` | Все юниты (фильтр по каталогу — необязателен) |
+| `GET /api/ktbsdata/units/{id}` | Один юнит |
+| `GET /api/ktbsdata/units/{id}/profiles` | Профили юнита |
+| `POST /api/ktbsdata/admin/import` | Импорт из BSData/wh40k-killteam на GitHub *(требует заголовок `X-Admin-Password`)* |
+| `GET /api/ktbsdata/admin/status` | Статус базы Kill Team BSData *(требует заголовок `X-Admin-Password`)* |
 
