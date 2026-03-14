@@ -176,13 +176,10 @@ app.Use(async (context, next) =>
 });
 
 // Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-    app.MapScalarApiReference("/scalar/wh40k", options => options.AddDocument("wh40k", "WH40K API"));
-    app.MapScalarApiReference("/scalar/bsdata", options => options.AddDocument("bsdata", "BSData 40k"));
-    app.MapScalarApiReference("/scalar/ktbsdata", options => options.AddDocument("ktbsdata", "BSData Kill Team"));
-}
+app.MapOpenApi();
+app.MapScalarApiReference("/scalar/wh40k", options => options.AddDocument("wh40k", "WH40K API"));
+app.MapScalarApiReference("/scalar/bsdata", options => options.AddDocument("bsdata", "BSData 40k"));
+app.MapScalarApiReference("/scalar/ktbsdata", options => options.AddDocument("ktbsdata", "BSData Kill Team"));
 
 app.UseRateLimiter();
 app.UseAuthorization();
