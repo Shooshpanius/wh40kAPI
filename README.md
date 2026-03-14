@@ -21,25 +21,47 @@ A Warhammer 40,000 10th Edition API with a React frontend.
 
 ### Database Setup
 
-Create the database and a dedicated user in MariaDB:
+Create the databases and a dedicated user in MariaDB:
 
 ```sql
 CREATE DATABASE wh40k CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-CREATE USER 'wh40k'@'localhost' IDENTIFIED BY 'changeme';
+CREATE DATABASE wh40kBSData CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE DATABASE wh40kKTBSData CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'wh40k'@'localhost' IDENTIFIED BY 'your_strong_password';
 GRANT ALL PRIVILEGES ON wh40k.* TO 'wh40k'@'localhost';
+GRANT ALL PRIVILEGES ON wh40kBSData.* TO 'wh40k'@'localhost';
+GRANT ALL PRIVILEGES ON wh40kKTBSData.* TO 'wh40k'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-Edit the connection string in `appsettings.json` to match your setup, or **override it securely** without editing the file:
+### Configuration
+**Never commit real credentials to the repository.**
+
+#### Option 1: Local development file (recommended for local dev)
+
+Copy the example file and fill in your values:
 
 ```sh
-# .NET user secrets (development only)
+cp wh40kAPI.Server/appsettings.Development.json.example wh40kAPI.Server/appsettings.Development.json
+# Then edit appsettings.Development.json — this file is in .gitignore and will not be committed
+```
+
+#### Option 2: .NET User Secrets (development only)
+
+```sh
 cd wh40kAPI.Server
 dotnet user-secrets set "ConnectionStrings:DefaultConnection" \
   "Server=localhost;Port=3306;Database=wh40k;User=wh40k;Password=your_real_password;"
+dotnet user-secrets set "AdminAuth:PasswordHash" "your_sha256_hash"
+```
 
-# Environment variable (any environment)
+#### Option 3: Environment variables (any environment)
+
+```sh
 export ConnectionStrings__DefaultConnection="Server=localhost;Port=3306;Database=wh40k;User=wh40k;Password=your_real_password;"
+export ConnectionStrings__BsDataConnection="Server=localhost;Port=3306;Database=wh40kBSData;User=wh40k;Password=your_real_password;"
+export ConnectionStrings__KtBsDataConnection="Server=localhost;Port=3306;Database=wh40kKTBSData;User=wh40k;Password=your_real_password;"
+export AdminAuth__PasswordHash="your_sha256_hash"
 ```
 
 ### Run
@@ -54,9 +76,10 @@ The app will be available at `https://localhost:51018` (Vite dev server).
 
 The admin panel is protected by a password sent as the `X-Admin-Password` header.
 
-The default password is **`admin123`**.
+Set a strong password of your choice. Compute its SHA-256 hash and put it into `AdminAuth:PasswordHash`
+(via `appsettings.Development.json`, user secrets, or an environment variable — **not** directly in `appsettings.json`).
 
-To change it, compute the SHA256 hash of your new password and update `AdminAuth:PasswordHash` in `appsettings.json`:
+To compute the hash of your password:
 
 ```sh
 # Linux/macOS

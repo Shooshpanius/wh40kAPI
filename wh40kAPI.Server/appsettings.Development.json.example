@@ -1,0 +1,16 @@
+{
+  "Logging": {
+    "LogLevel": {
+      "Default": "Information",
+      "Microsoft.AspNetCore": "Warning"
+    }
+  },
+  "ConnectionStrings": {
+    "DefaultConnection": "Server=localhost;Port=3306;Database=wh40k;User=YOUR_DB_USER;Password=YOUR_DB_PASSWORD;",
+    "BsDataConnection": "Server=localhost;Port=3306;Database=wh40kBSData;User=YOUR_DB_USER;Password=YOUR_DB_PASSWORD;",
+    "KtBsDataConnection": "Server=localhost;Port=3306;Database=wh40kKTBSData;User=YOUR_DB_USER;Password=YOUR_DB_PASSWORD;"
+  },
+  "AdminAuth": {
+    "PasswordHash": "YOUR_ADMIN_PASSWORD_SHA256_HASH"
+  }
+}
