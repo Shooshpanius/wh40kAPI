@@ -21,7 +21,9 @@ else
 if (string.IsNullOrEmpty(connectionString))
     throw new InvalidOperationException("Connection string 'DefaultConnection' not found.");
 
-var serverVersion = ServerVersion.AutoDetect(connectionString);
+// AutoDetect requires an active DB connection at startup; fall back to a safe default
+// if the server is temporarily unavailable (e.g., credentials were just changed).
+var serverVersion = DetectServerVersion(connectionString);
 builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(connectionString, serverVersion));
 
@@ -40,7 +42,7 @@ else
 if (string.IsNullOrEmpty(bsDataConnectionString))
     throw new InvalidOperationException("Connection string 'BsDataConnection' not found.");
 
-var bsDataServerVersion = ServerVersion.AutoDetect(bsDataConnectionString);
+var bsDataServerVersion = DetectServerVersion(bsDataConnectionString);
 builder.Services.AddDbContext<BsDataDbContext>(options =>
     options.UseMySql(bsDataConnectionString, bsDataServerVersion));
 
@@ -59,7 +61,7 @@ else
 if (string.IsNullOrEmpty(ktBsDataConnectionString))
     throw new InvalidOperationException("Connection string 'KtBsDataConnection' not found.");
 
-var ktBsDataServerVersion = ServerVersion.AutoDetect(ktBsDataConnectionString);
+var ktBsDataServerVersion = DetectServerVersion(ktBsDataConnectionString);
 builder.Services.AddDbContext<KtBsDataDbContext>(options =>
     options.UseMySql(ktBsDataConnectionString, ktBsDataServerVersion));
 
@@ -90,17 +92,24 @@ builder.Services.AddOpenApi("ktbsdata", options =>
 
 var app = builder.Build();
 
-// Ensure database is created
+// Ensure database is created; wrapped in try-catch so the server starts even if the DB
+// is temporarily unavailable (e.g., credentials were just changed).
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
-
-    var bsDb = scope.ServiceProvider.GetRequiredService<BsDataDbContext>();
-    bsDb.Database.EnsureCreated();
-
-    var ktBsDb = scope.ServiceProvider.GetRequiredService<KtBsDataDbContext>();
-    ktBsDb.Database.EnsureCreated();
+    var startupLogger = scope.ServiceProvider.GetRequiredService<ILogger<Program>>();
+    try
+    {
+        scope.ServiceProvider.GetRequiredService<AppDbContext>().Database.EnsureCreated();
+        scope.ServiceProvider.GetRequiredService<BsDataDbContext>().Database.EnsureCreated();
+        scope.ServiceProvider.GetRequiredService<KtBsDataDbContext>().Database.EnsureCreated();
+    }
+    catch (Exception ex)
+    {
+        startupLogger.LogWarning(ex,
+            "Could not connect to one or more databases at startup. " +
+            "Database operations will fail until the connection is restored. " +
+            "Check your connection strings and database credentials.");
+    }
 }
 
 app.UseDefaultFiles();
@@ -122,3 +131,22 @@ app.MapControllers();
 app.MapFallbackToFile("/index.html");
 
 app.Run();
+
+// AutoDetect opens a live DB connection to query the server version.
+// If the DB is unreachable (e.g., credentials were just changed), fall back to a
+// safe MariaDB 10.6 default so the server still starts up and can serve requests.
+static ServerVersion DetectServerVersion(string cs)
+{
+    try
+    {
+        return ServerVersion.AutoDetect(cs);
+    }
+    catch (Exception ex)
+    {
+        Console.Error.WriteLine(
+            $"[WARN] Could not auto-detect database server version: {ex.Message}. " +
+            "Falling back to MariaDB 10.6. " +
+            "Check your connection string and database credentials.");
+        return ServerVersion.Parse("10.6.0-mariadb");
+    }
+}

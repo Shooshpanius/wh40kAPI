@@ -59,7 +59,7 @@ export function Admin() {
                 setAuthError('Invalid password. Please try again.');
             }
         } catch {
-            setAuthError('Connection error.');
+            setAuthError('Cannot reach the server. Make sure the server is running and your connection is working, then try again.');
         } finally {
             setAuthLoading(false);
         }
