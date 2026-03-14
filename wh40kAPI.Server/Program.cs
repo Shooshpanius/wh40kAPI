@@ -1,5 +1,7 @@
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Scalar.AspNetCore;
+using System.Threading.RateLimiting;
 using wh40kAPI.Server.Data;
 using wh40kAPI.Server.Services;
 
@@ -73,6 +75,36 @@ builder.Services.AddHttpClient("github", client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd("wh40kAPI/1.0");
     client.Timeout = TimeSpan.FromMinutes(10);
 });
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddPolicy("admin", context =>
+    {
+        var ip = context.Connection.RemoteIpAddress?.ToString();
+        // Requests with no IP get their own very restrictive bucket (1/min)
+        // to prevent sharing and effectively block unknown sources
+        if (ip is null)
+        {
+            return RateLimitPartition.GetFixedWindowLimiter("no-ip",
+                _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 1,
+                    Window = TimeSpan.FromMinutes(1),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                    QueueLimit = 0
+                });
+        }
+        return RateLimitPartition.GetFixedWindowLimiter(ip,
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst,
+                QueueLimit = 0
+            });
+    });
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+});
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.ReferenceHandler =
@@ -115,16 +147,28 @@ using (var scope = app.Services.CreateScope())
 app.UseDefaultFiles();
 app.MapStaticAssets();
 
+// Security headers for all responses
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-XSS-Protection", "1; mode=block");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+    context.Response.Headers.Append("Permissions-Policy", "geolocation=(), microphone=(), camera=()");
+    await next();
+});
+
 // Configure the HTTP request pipeline.
-//if (app.Environment.IsDevelopment())
-//{
+if (app.Environment.IsDevelopment())
+{
     app.MapOpenApi();
     app.MapScalarApiReference("/scalar/wh40k", options => options.AddDocument("wh40k", "WH40K API"));
     app.MapScalarApiReference("/scalar/bsdata", options => options.AddDocument("bsdata", "BSData 40k"));
     app.MapScalarApiReference("/scalar/ktbsdata", options => options.AddDocument("ktbsdata", "BSData Kill Team"));
-//}
+}
 
 app.UseAuthorization();
+app.UseRateLimiter();
 
 app.MapControllers();
 

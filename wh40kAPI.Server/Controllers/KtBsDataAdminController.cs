@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using wh40kAPI.Server.Data;
 using wh40kAPI.Server.Middleware;
@@ -9,6 +10,7 @@ namespace wh40kAPI.Server.Controllers;
 [ApiController]
 [ApiExplorerSettings(IgnoreApi = true)]
 [Route("api/ktbsdata/admin")]
+[EnableRateLimiting("admin")]
 public class KtBsDataAdminController(KtBsDataDbContext db, KtBsDataImportService importService) : ControllerBase
 {
     /// <summary>
