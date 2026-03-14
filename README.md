@@ -79,15 +79,34 @@ The admin panel is protected by a password sent as the `X-Admin-Password` header
 Set a strong password of your choice. Compute its SHA-256 hash and put it into `AdminAuth:PasswordHash`
 (via `appsettings.Development.json`, user secrets, or an environment variable — **not** directly in `appsettings.json`).
 
+> **Note**: The admin password hash and the database password are separate.
+> The connection strings always use the **plain-text** database password.
+> Only `AdminAuth:PasswordHash` requires a SHA-256 hash.
+
 To compute the hash of your password:
 
 ```sh
-# Linux/macOS
-echo -n "your_password" | sha256sum
+# Linux/macOS — copy only the hex string, not the trailing "  -" that sha256sum appends
+echo -n "your_password" | sha256sum | awk '{print $1}'
 
 # PowerShell
 [System.Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData([System.Text.Encoding]::UTF8.GetBytes("your_password"))).ToLower()
 ```
+
+### Changing the admin password
+
+1. Compute the SHA-256 hash of the new password (see above).
+2. Update `AdminAuth:PasswordHash` in your configuration (`appsettings.Development.json`, user secrets, or the `AdminAuth__PasswordHash` environment variable).
+3. **Restart the server** for the new hash to take effect.
+
+> **Troubleshooting "Cannot reach the server" / connection errors**
+>
+> If the server is not responding after a configuration change:
+> - Verify the server process is actually running (`dotnet run` or your container).
+> - Check the server logs for startup errors — a wrong connection string will be logged as a warning and the server will still start, but database operations will fail.
+> - Double-check that the `Password=` field in the connection strings contains the **plain-text** database password, not a hash.
+> - Make sure you are editing the correct config file for your environment (see [Configuration](#configuration) above).
+
 
 ## API Endpoints
 
