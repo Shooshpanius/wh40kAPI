@@ -143,6 +143,54 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     }
 
     /// <summary>
+    /// Returns the list of detachment names available for the given fraction.
+    /// </summary>
+    [HttpGet("{id}/detachments")]
+    public async Task<ActionResult<IEnumerable<string>>> GetDetachments(string id)
+    {
+        if (!await db.Catalogues.AnyAsync(c => c.Id == id && !c.Library))
+            return NotFound();
+
+        var catalogueIds = await CollectCatalogueIdsAsync(id);
+
+        // Step 1: root Detachment nodes: entryType="upgrade", parentId=null, category="Configuration"
+        var detachmentRootIds = await db.Units
+            .AsNoTracking()
+            .Where(u => catalogueIds.Contains(u.CatalogueId)
+                     && u.EntryType == "upgrade"
+                     && u.ParentId == null
+                     && u.Categories.Any(c => c.Name == "Configuration"))
+            .Select(u => u.Id)
+            .ToListAsync();
+
+        if (detachmentRootIds.Count == 0)
+            return Ok(Array.Empty<string>());
+
+        // Step 2: child selectionEntryGroup nodes
+        var groupIds = await db.Units
+            .AsNoTracking()
+            .Where(u => u.ParentId != null
+                     && detachmentRootIds.Contains(u.ParentId)
+                     && u.EntryType == "selectionEntryGroup")
+            .Select(u => u.Id)
+            .ToListAsync();
+
+        if (groupIds.Count == 0)
+            return Ok(Array.Empty<string>());
+
+        // Step 3: detachment names — children of selectionEntryGroup
+        var names = await db.Units
+            .AsNoTracking()
+            .Where(u => u.ParentId != null && groupIds.Contains(u.ParentId))
+            .OrderBy(u => u.Name)
+            .Select(u => u.Name)
+            .Distinct()
+            .ToListAsync();
+
+        return Ok(names);
+    }
+
+    /// <summary>
     /// Collects all catalogue IDs reachable from <paramref name="rootId"/>
     /// by following catalogueLinks recursively.
     /// Loads all catalogue links in a single query then traverses them in memory.
