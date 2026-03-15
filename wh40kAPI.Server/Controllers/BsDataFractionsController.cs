@@ -215,7 +215,11 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
         if (detachmentRootIds.Count == 0)
             return Ok(Array.Empty<BsDataDetachmentInfo>());
 
-        // Step 2: child selectionEntryGroup nodes
+        // Step 2: child selectionEntryGroup nodes — either nested directly inside the
+        // detachment root, or referenced from it via an entryLink.
+        // Some factions (e.g. Space Marines) store the Detachment selection group in
+        // sharedSelectionEntryGroups (parentId=null) and link it from the Detachment
+        // root via an entryLink rather than nesting it directly.
         var groupIds = await db.Units
             .AsNoTracking()
             .Where(u => u.ParentId != null
@@ -223,6 +227,15 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
                      && u.EntryType == "selectionEntryGroup")
             .Select(u => u.Id)
             .ToListAsync();
+
+        // Also follow entryLinks of type "selectionEntryGroup" from the detachment roots.
+        var linkedGroupIds = await db.EntryLinks
+            .AsNoTracking()
+            .Where(l => detachmentRootIds.Contains(l.UnitId) && l.Type == "selectionEntryGroup")
+            .Select(l => l.TargetId)
+            .ToListAsync();
+        if (linkedGroupIds.Count > 0)
+            groupIds.AddRange(linkedGroupIds);
 
         if (groupIds.Count == 0)
             return Ok(Array.Empty<BsDataDetachmentInfo>());
