@@ -51,4 +51,33 @@ public class BsDataUnitNode
         CostTiers = unit.CostTiers,
         ModifierGroups = unit.ModifierGroups,
     };
+
+    /// <summary>
+    /// Creates a copy of <paramref name="source"/> with <see cref="Hidden"/> forced to
+    /// <see langword="true"/> and an extra <see cref="BsDataModifierGroup"/> that encodes
+    /// the detachment-unlock condition (i.e. the unit becomes visible when the correct
+    /// detachment is selected in the roster).
+    /// </summary>
+    public static BsDataUnitNode WithDetachmentDependency(BsDataUnitNode source, string modifiers, string conditions) => new()
+    {
+        Id = source.Id,
+        CatalogueId = source.CatalogueId,
+        ParentId = source.ParentId,
+        Name = source.Name,
+        EntryType = source.EntryType,
+        Points = source.Points,
+        Hidden = true,
+        Collective = source.Collective,
+        Import = source.Import,
+        PublicationId = source.PublicationId,
+        Page = source.Page,
+        MinInRoster = source.MinInRoster,
+        MaxInRoster = source.MaxInRoster,
+        Categories = source.Categories,
+        InfoLinks = source.InfoLinks,
+        EntryLinks = source.EntryLinks,
+        CostTiers = source.CostTiers,
+        Children = source.Children,
+        ModifierGroups = [.. source.ModifierGroups, new BsDataModifierGroup { UnitId = source.Id, Modifiers = modifiers, Conditions = conditions }],
+    };
 }

@@ -135,7 +135,15 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
                 // Deeper transitive cycles (A→B→C→A) are handled gracefully at
                 // serialization time by ReferenceHandler.IgnoreCycles.
                 if (target.Id == node.Id || target.Id == node.ParentId) continue;
-                node.Children.Add(target);
+
+                // When the entryLink carries a detachment dependency (hide unless a specific
+                // detachment is active), present the linked unit as hidden by default with an
+                // unlock modifierGroup — rather than using the shared target node, which has
+                // hidden=false based on the underlying selectionEntry definition.
+                if (link.DetachmentModifiers != null && link.DetachmentConditions != null)
+                    node.Children.Add(BsDataUnitNode.WithDetachmentDependency(target, link.DetachmentModifiers, link.DetachmentConditions));
+                else
+                    node.Children.Add(target);
             }
         }
 
