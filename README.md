@@ -162,6 +162,23 @@ echo -n "ваш_пароль" | sha256sum | awk '{print $1}'
 > - Убедитесь, что вы редактируете правильный файл конфигурации для вашего окружения (см. [Конфигурация](#конфигурация)).
 
 
+## Веб-интерфейс (SPA)
+
+Встроенный React-интерфейс доступен по корневому адресу приложения и включает следующие страницы:
+
+| Маршрут | Страница |
+|---------|----------|
+| `/` | Стартовая страница |
+| `/wahapedia` | Главная страница WH40K (обзор данных) |
+| `/factions` | Список фракций WH40K |
+| `/datasheets` | Датащиты юнитов |
+| `/detachments` | Отряды |
+| `/stratagems` | Стратагемы |
+| `/enhancements` | Улучшения |
+| `/bsdata-40k` | Данные BSData 40K |
+| `/bsdata-killteam` | Данные BSData Kill Team |
+| `/admin` | Панель администратора |
+
 ## Эндпоинты API
 
 ### WH40K API (`/api/wh40k/`)
@@ -169,17 +186,28 @@ echo -n "ваш_пароль" | sha256sum | awk '{print $1}'
 | Эндпоинт | Описание |
 |---|---|
 | `GET /api/wh40k/factions` | Все фракции |
+| `GET /api/wh40k/factions/{id}` | Одна фракция |
 | `GET /api/wh40k/datasheets?factionId=SM` | Датащиты (фильтр по фракции — необязателен) |
 | `GET /api/wh40k/datasheets/{id}` | Один датащит |
 | `GET /api/wh40k/datasheets/{id}/abilities` | Способности датащита |
 | `GET /api/wh40k/datasheets/{id}/models` | Модели датащита |
 | `GET /api/wh40k/datasheets/{id}/wargear` | Снаряжение датащита |
+| `GET /api/wh40k/datasheets/{id}/keywords` | Ключевые слова датащита |
+| `GET /api/wh40k/datasheets/{id}/unit-composition` | Состав отряда датащита |
+| `GET /api/wh40k/datasheets/{id}/options` | Опции датащита |
+| `GET /api/wh40k/datasheets/{id}/model-costs` | Стоимости моделей датащита |
 | `GET /api/wh40k/abilities?factionId=SM` | Способности (фильтр по фракции — необязателен) |
 | `GET /api/wh40k/detachments?factionId=SM` | Отряды (фильтр по фракции — необязателен) |
+| `GET /api/wh40k/detachments/{id}` | Один отряд |
+| `GET /api/wh40k/detachments/{id}/abilities` | Способности отряда |
 | `GET /api/wh40k/strategems?factionId=SM` | Стратагемы (фильтр по фракции — необязателен) |
+| `GET /api/wh40k/strategems/{id}` | Одна стратагема |
 | `GET /api/wh40k/enhancements?factionId=SM` | Улучшения (фильтр по фракции — необязателен) |
+| `GET /api/wh40k/enhancements/{id}` | Одно улучшение |
 | `GET /api/wh40k/source` | Книги-источники |
+| `GET /api/wh40k/source/{id}` | Одна книга-источник |
 | `POST /api/wh40k/admin/upload` | Загрузить `Data.rar` *(требует заголовок `X-Admin-Password`, макс. 50 МБ)* |
+| `POST /api/wh40k/admin/verify` | Проверить пароль администратора *(требует заголовок `X-Admin-Password`)* |
 | `GET /api/wh40k/admin/status` | Статус базы данных *(требует заголовок `X-Admin-Password`)* |
 
 ### BSData WH40K API (`/api/bsdata/`)
@@ -191,12 +219,21 @@ echo -n "ваш_пароль" | sha256sum | awk '{print $1}'
 | `GET /api/bsdata/catalogues/{id}/units` | Юниты каталога |
 | `GET /api/bsdata/catalogues/{id}/rules` | Общие правила/способности каталога |
 | `GET /api/bsdata/catalogues/{id}/links` | Зависимости каталога |
+| `GET /api/bsdata/fractions` | Все фракции (каталоги с `library=false`) |
+| `GET /api/bsdata/fractions/{id}` | Одна фракция |
+| `GET /api/bsdata/fractions/{id}/units` | Юниты фракции (рекурсивно через catalogueLinks) |
+| `GET /api/bsdata/fractions/{id}/unitsWithCosts` | Юниты фракции со стоимостями |
+| `GET /api/bsdata/fractions/{id}/unitsTree` | Дерево юнитов фракции |
+| `GET /api/bsdata/fractions/{id}/detachments` | Отряды фракции |
 | `GET /api/bsdata/units?catalogueId={id}` | Все юниты (фильтр по каталогу — необязателен) |
 | `GET /api/bsdata/units/{id}` | Один юнит |
 | `GET /api/bsdata/units/{id}/profiles` | Профили юнита |
 | `GET /api/bsdata/units/{id}/categories` | Категории юнита |
 | `GET /api/bsdata/units/{id}/infolinks` | Информационные ссылки юнита (правила, способности и т.д.) |
 | `GET /api/bsdata/units/{id}/entrylinks` | Ссылки на вхождения юнита (снаряжение, опции и т.д.) |
+| `GET /api/bsdata/units/{id}/constraints` | Ограничения юнита |
+| `GET /api/bsdata/units/{id}/modifiergroups` | Группы модификаторов юнита |
+| `GET /api/bsdata/units/{id}/cost-tiers` | Ценовые уровни юнита |
 | `POST /api/bsdata/admin/import` | Импорт из BSData/wh40k-10e на GitHub *(требует заголовок `X-Admin-Password`)* |
 | `GET /api/bsdata/admin/status` | Статус базы BSData *(требует заголовок `X-Admin-Password`)* |
 
@@ -212,4 +249,54 @@ echo -n "ваш_пароль" | sha256sum | awk '{print $1}'
 | `GET /api/ktbsdata/units/{id}/profiles` | Профили юнита |
 | `POST /api/ktbsdata/admin/import` | Импорт из BSData/wh40k-killteam на GitHub *(требует заголовок `X-Admin-Password`)* |
 | `GET /api/ktbsdata/admin/status` | Статус базы Kill Team BSData *(требует заголовок `X-Admin-Password`)* |
+
+## Развёртывание в Docker
+
+Проект содержит отдельные `Dockerfile` для бэкенда и фронтенда. Фронтенд (Nginx) проксирует запросы к `/api`, `/scalar` и `/openapi` на бэкенд-контейнер.
+
+### Сборка образов
+
+```sh
+# Бэкенд (из корня репозитория)
+docker build -f wh40kAPI.Server/Dockerfile -t wh40k-api-back .
+
+# Фронтенд
+docker build -f wh40kapi.client/Dockerfile -t wh40k-api-front wh40kapi.client/
+```
+
+### Переменные окружения для бэкенда
+
+При запуске контейнера передайте строки подключения и хеш пароля через переменные окружения:
+
+```sh
+docker run -d \
+  -e ConnectionStrings__DefaultConnection="Server=db;Port=3306;Database=wh40k;User=wh40k;Password=ваш_пароль;" \
+  -e ConnectionStrings__BsDataConnection="Server=db;Port=3306;Database=wh40kBSData;User=wh40k;Password=ваш_пароль;" \
+  -e ConnectionStrings__KtBsDataConnection="Server=db;Port=3306;Database=wh40kKTBSData;User=wh40k;Password=ваш_пароль;" \
+  -e AdminAuth__PasswordHash="ваш_sha256_хеш" \
+  -p 8080:8080 \
+  --name back40api \
+  wh40k-api-back
+```
+
+### Nginx-прокси (фронтенд)
+
+Конфигурация Nginx в `wh40kapi.client/nginx.conf` настроена так, что запросы к `/api`, `/scalar` и `/openapi` передаются на бэкенд-контейнер `back40api:8080`, а все остальные пути обслуживаются как SPA. Убедитесь, что оба контейнера находятся в одной Docker-сети:
+
+```sh
+docker network create wh40k-net
+docker run -d --network wh40k-net --name back40api ... wh40k-api-back
+docker run -d --network wh40k-net -p 80:80 --name front40api wh40k-api-front
+```
+
+## Безопасность
+
+- **Хеш пароля администратора** — пароль для доступа к панели администратора никогда не хранится в открытом виде: в конфигурации указывается только SHA-256 хеш.
+- **Ограничение частоты запросов (rate limiting)** — эндпоинты `/admin` защищены: не более **10 запросов в минуту** с одного IP-адреса (при отсутствии IP — 1 запрос в минуту). При превышении лимита возвращается `429 Too Many Requests`.
+- **Заголовки безопасности** — все HTTP-ответы содержат заголовки: `X-Content-Type-Options`, `X-Frame-Options`, `X-XSS-Protection`, `Referrer-Policy`, `Permissions-Policy`.
+- **Конфигурация через переменные окружения** — в production рекомендуется передавать строки подключения и хеш пароля через переменные окружения, не коммитя их в репозиторий.
+
+## Лицензия
+
+Проект распространяется под лицензией [GNU General Public License v3.0](LICENSE.txt).
 
