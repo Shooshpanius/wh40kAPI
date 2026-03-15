@@ -35,6 +35,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         int totalCostTiers = 0;
         int totalRules = 0;
         int totalCatalogueLinks = 0;
+        int totalCatalogueLevelEntryLinks = 0;
 
         // Keep global seen sets to avoid adding entities with duplicate primary keys
         var seenCatalogueIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -53,7 +54,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             {
                 logger.LogInformation("Importing {File}", fileName);
                 var xml = await client.GetStringAsync(downloadUrl);
-                var (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, rules, catalogueLinks) = ParseCatalogueXml(xml);
+                var (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, rules, catalogueLinks, catalogueLevelEntryLinks) = ParseCatalogueXml(xml);
 
                 if (catalogue == null) continue;
 
@@ -188,6 +189,11 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 if (newCatalogueLinks.Count > 0)
                     db.CatalogueLinks.AddRange(newCatalogueLinks);
 
+                // Catalogue-level entry links use auto-generated int PKs so no seen-set
+                // is needed beyond the per-catalogue deduplication in ParseCatalogueXml.
+                if (catalogueLevelEntryLinks.Count > 0)
+                    db.CatalogueLevelEntryLinks.AddRange(catalogueLevelEntryLinks);
+
                 await db.SaveChangesAsync();
                 totalUnits += newUnits.Count;
                 totalProfiles += newProfiles.Count;
@@ -199,6 +205,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 totalCostTiers += newCostTiers.Count;
                 totalRules += newRules.Count;
                 totalCatalogueLinks += newCatalogueLinks.Count;
+                totalCatalogueLevelEntryLinks += catalogueLevelEntryLinks.Count;
             }
             catch (Exception ex)
             {
@@ -210,9 +217,11 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         logger.LogInformation(
             "Import complete. Units: {TotalUnits}, Profiles: {TotalProfiles}, Categories: {TotalCategories}, " +
             "InfoLinks: {TotalInfoLinks}, EntryLinks: {TotalEntryLinks}, Constraints: {TotalConstraints}, " +
-            "ModifierGroups: {TotalModifierGroups}, CostTiers: {TotalCostTiers}, Rules: {TotalRules}, CatalogueLinks: {TotalCatalogueLinks}",
+            "ModifierGroups: {TotalModifierGroups}, CostTiers: {TotalCostTiers}, Rules: {TotalRules}, " +
+            "CatalogueLinks: {TotalCatalogueLinks}, CatalogueLevelEntryLinks: {TotalCatalogueLevelEntryLinks}",
             totalUnits, totalProfiles, totalCategories, totalInfoLinks, totalEntryLinks,
-            totalConstraints, totalModifierGroups, totalCostTiers, totalRules, totalCatalogueLinks);
+            totalConstraints, totalModifierGroups, totalCostTiers, totalRules, totalCatalogueLinks,
+            totalCatalogueLevelEntryLinks);
         return totalUnits;
     }
 
@@ -255,15 +264,16 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         List<BsDataModifierGroup> ModifierGroups,
         List<BsDataCostTier> CostTiers,
         List<BsDataRule> Rules,
-        List<BsDataCatalogueLink> CatalogueLinks)
+        List<BsDataCatalogueLink> CatalogueLinks,
+        List<BsDataCatalogueEntryLink> CatalogueLevelEntryLinks)
         ParseCatalogueXml(string xml)
     {
         XDocument doc;
         try { doc = XDocument.Parse(xml); }
-        catch { return (null, [], [], [], [], [], [], [], [], [], []); }
+        catch { return (null, [], [], [], [], [], [], [], [], [], [], []); }
 
         var root = doc.Root;
-        if (root == null) return (null, [], [], [], [], [], [], [], [], [], []);
+        if (root == null) return (null, [], [], [], [], [], [], [], [], [], [], []);
 
         var id = root.Attribute("id")?.Value ?? "";
         var name = root.Attribute("name")?.Value ?? "";
@@ -302,6 +312,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         var costTiers = new List<BsDataCostTier>();
         var rules = new List<BsDataRule>();
         var catalogueLinks = new List<BsDataCatalogueLink>();
+        var catalogueLevelEntryLinks = new List<BsDataCatalogueEntryLink>();
         var seenUnitIds = new HashSet<string>();
 
         // Parse sharedSelectionEntries (top-level reusable units/models)
@@ -364,7 +375,27 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             });
         }
 
-        return (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, rules, catalogueLinks);
+        // Parse catalogue-level entryLinks — links declared directly under the
+        // catalogue root (not inside a selectionEntry).  These record which shared
+        // entries (e.g. the Detachment root) a faction explicitly imports and are
+        // used by GetDetachments to resolve the correct detachment root when it
+        // lives in a library catalogue rather than in the faction's own catalogue.
+        var seenCatalogueEntryLinkTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var el in root
+            .Element(Ns + "entryLinks")
+            ?.Elements(Ns + "entryLink") ?? Enumerable.Empty<XElement>())
+        {
+            var targetId = el.Attribute("targetId")?.Value;
+            if (string.IsNullOrEmpty(targetId)) continue;
+            if (!seenCatalogueEntryLinkTargets.Add(targetId)) continue;
+            catalogueLevelEntryLinks.Add(new BsDataCatalogueEntryLink
+            {
+                CatalogueId = id,
+                TargetId = targetId,
+            });
+        }
+
+        return (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, rules, catalogueLinks, catalogueLevelEntryLinks);
     }
 
     private static void ExtractRule(XElement rule, string catalogueId, List<BsDataRule> rules)

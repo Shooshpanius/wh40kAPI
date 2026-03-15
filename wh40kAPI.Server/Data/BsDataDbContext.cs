@@ -7,6 +7,7 @@ public class BsDataDbContext(DbContextOptions<BsDataDbContext> options) : DbCont
 {
     public DbSet<BsDataCatalogue> Catalogues => Set<BsDataCatalogue>();
     public DbSet<BsDataCatalogueLink> CatalogueLinks => Set<BsDataCatalogueLink>();
+    public DbSet<BsDataCatalogueEntryLink> CatalogueLevelEntryLinks => Set<BsDataCatalogueEntryLink>();
     public DbSet<BsDataRule> Rules => Set<BsDataRule>();
     public DbSet<BsDataUnit> Units => Set<BsDataUnit>();
     public DbSet<BsDataProfile> Profiles => Set<BsDataProfile>();
@@ -19,6 +20,12 @@ public class BsDataDbContext(DbContextOptions<BsDataDbContext> options) : DbCont
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<BsDataCatalogueEntryLink>()
+            .HasOne<BsDataCatalogue>()
+            .WithMany()
+            .HasForeignKey(l => l.CatalogueId)
+            .OnDelete(DeleteBehavior.Cascade);
+
         modelBuilder.Entity<BsDataCatalogueLink>()
             .HasOne<BsDataCatalogue>()
             .WithMany()

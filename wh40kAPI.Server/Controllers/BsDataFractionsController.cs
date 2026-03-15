@@ -168,9 +168,37 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
 
         // Fallback: some factions (e.g. Chaos Daemons) define their Detachment entry
         // in a shared library catalogue rather than directly in their own catalogue.
-        // Only follow catalogueLinks where importRootEntries=true so that faction
-        // catalogues linked without importRootEntries (e.g. Chaos Space Marines linked
-        // from Chaos Daemons) do not contribute their own detachment roots.
+        // First try catalogue-level entryLinks — an explicit list of shared entries
+        // imported by the faction catalogue.  This is more precise than a recursive
+        // catalogue search because it won't pick up detachment roots from other linked
+        // library catalogues (e.g. Chaos Knights Library linked from Chaos Daemons
+        // with importRootEntries=true).
+        if (detachmentRootIds.Count == 0)
+        {
+            var directTargetIds = await db.CatalogueLevelEntryLinks
+                .AsNoTracking()
+                .Where(l => l.CatalogueId == id)
+                .Select(l => l.TargetId)
+                .ToListAsync();
+
+            if (directTargetIds.Count > 0)
+            {
+                detachmentRootIds = await db.Units
+                    .AsNoTracking()
+                    .Where(u => directTargetIds.Contains(u.Id)
+                             && u.EntryType == "upgrade"
+                             && u.ParentId == null
+                             && u.Categories.Any(c => c.Name == "Configuration"))
+                    .Select(u => u.Id)
+                    .ToListAsync();
+            }
+        }
+
+        // Last-resort fallback: recursively follow catalogueLinks where
+        // importRootEntries=true.  Only follow importRootEntries=true links so that
+        // faction catalogues linked without importRootEntries (e.g. Chaos Space
+        // Marines linked from Chaos Daemons) do not contribute their own detachment
+        // roots.
         if (detachmentRootIds.Count == 0)
         {
             var linkedCatalogueIds = await CollectCatalogueIdsAsync(id, importRootEntriesOnly: true);
