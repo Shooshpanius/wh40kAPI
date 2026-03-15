@@ -248,6 +248,46 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             .Select(u => new BsDataDetachmentInfo { Id = u.Id, Name = u.Name })
             .ToListAsync();
 
+        if (detachments.Count == 0)
+            return Ok(Array.Empty<BsDataDetachmentInfo>());
+
+        // Step 4: filter detachment entries by their hidden-modifier visibility conditions.
+        // In BSData, each detachment entry that is not available to all factions carries a
+        // <modifier type="set" field="hidden" value="true"> with a
+        // <condition scope="primary-catalogue"> child.  Two patterns:
+        //   • notInstanceOf childId=X → entry is hidden when the primary catalogue is NOT X,
+        //     i.e. the detachment is exclusive to catalogue X.
+        //   • instanceOf   childId=X → entry is hidden when the primary catalogue IS X,
+        //     i.e. the detachment is excluded from catalogue X.
+        // An entry with no such conditions is visible to all.
+        var detachmentIds = detachments.Select(d => d.Id).ToList();
+        var visibilities = await db.DetachmentVisibilities
+            .AsNoTracking()
+            .Where(v => detachmentIds.Contains(v.UnitId))
+            .ToListAsync();
+
+        if (visibilities.Count > 0)
+        {
+            var visibilityLookup = visibilities.ToLookup(v => v.UnitId, StringComparer.OrdinalIgnoreCase);
+            detachments = detachments
+                .Where(d =>
+                {
+                    var conditions = visibilityLookup[d.Id];
+                    foreach (var cond in conditions)
+                    {
+                        bool catalogueMatches = string.Equals(id, cond.CatalogueId, StringComparison.OrdinalIgnoreCase);
+                        // notInstanceOf: hidden when catalogue is NOT the specified one → exclude unless id matches
+                        if (string.Equals(cond.ConditionType, "notInstanceOf", StringComparison.OrdinalIgnoreCase) && !catalogueMatches)
+                            return false;
+                        // instanceOf: hidden when catalogue IS the specified one → exclude when id matches
+                        if (string.Equals(cond.ConditionType, "instanceOf", StringComparison.OrdinalIgnoreCase) && catalogueMatches)
+                            return false;
+                    }
+                    return true;
+                })
+                .ToList();
+        }
+
         return Ok(detachments.DistinctBy(d => d.Id));
     }
 

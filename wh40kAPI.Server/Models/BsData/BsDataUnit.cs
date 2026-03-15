@@ -27,4 +27,5 @@ public class BsDataUnit
     public ICollection<BsDataConstraint> Constraints { get; set; } = [];
     public ICollection<BsDataModifierGroup> ModifierGroups { get; set; } = [];
     public ICollection<BsDataCostTier> CostTiers { get; set; } = [];
+    public ICollection<BsDataDetachmentVisibility> DetachmentVisibilities { get; set; } = [];
 }
