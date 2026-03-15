@@ -670,6 +670,23 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             });
         }
 
+        // Extract top-level (entry-level) modifiers — direct <modifiers>/<modifier> elements
+        // that are NOT inside a <modifierGroup>.  Each such modifier is stored as a separate
+        // BsDataModifierGroup so that API consumers can evaluate detachment-conditional
+        // changes (e.g. Battleline category or max-model changes in specific detachments).
+        // Conditions are collected from both direct <conditions> and from
+        // <conditionGroups>/<conditionGroup>/<conditions>.
+        foreach (var mod in entry.Element(Ns + "modifiers")?.Elements(Ns + "modifier") ?? Enumerable.Empty<XElement>())
+        {
+            var (entryModJson, entryCondJson) = ExtractModifierAsGroup(mod);
+            modifierGroups.Add(new BsDataModifierGroup
+            {
+                UnitId = unitId,
+                Modifiers = entryModJson,
+                Conditions = entryCondJson,
+            });
+        }
+
         // Extract cost tiers from direct <modifiers> (not inside <modifierGroups>).
         // Units with multiple cost tiers have <modifier type="set" field="{pts_typeId}" value="...">
         // with a condition on the number of models (field="selections" childId="model").
@@ -980,5 +997,50 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         }
 
         return (null, null);
+    }
+
+    /// <summary>
+    /// Converts a single <c>&lt;modifier&gt;</c> XML element into a
+    /// <c>(modifiers, conditions)</c> JSON-string pair suitable for storing as a
+    /// <see cref="BsDataModifierGroup"/>.
+    /// Conditions are collected from both direct <c>&lt;conditions&gt;</c> and from
+    /// <c>&lt;conditionGroups&gt;/&lt;conditionGroup&gt;/&lt;conditions&gt;</c>.
+    /// </summary>
+    private static (string Modifiers, string? Conditions) ExtractModifierAsGroup(XElement mod)
+    {
+        var modifiers = JsonSerializer.Serialize(new[]
+        {
+            new
+            {
+                id = mod.Attribute("id")?.Value,
+                field = mod.Attribute("field")?.Value,
+                type = mod.Attribute("type")?.Value,
+                value = mod.Attribute("value")?.Value,
+            },
+        });
+
+        static IEnumerable<object> SelectConditions(IEnumerable<XElement> conditions) =>
+            conditions.Select(c => (object)new
+            {
+                id = c.Attribute("id")?.Value,
+                field = c.Attribute("field")?.Value,
+                scope = c.Attribute("scope")?.Value,
+                value = c.Attribute("value")?.Value,
+                type = c.Attribute("type")?.Value,
+                childId = c.Attribute("childId")?.Value,
+            });
+
+        // Direct conditions: <modifier><conditions><condition .../>
+        var allConditions = SelectConditions(
+            mod.Element(Ns + "conditions")?.Elements(Ns + "condition") ?? []).ToList();
+
+        // Grouped conditions: <modifier><conditionGroups><conditionGroup><conditions><condition .../>
+        foreach (var cg in mod.Element(Ns + "conditionGroups")?.Elements(Ns + "conditionGroup") ?? [])
+        {
+            allConditions.AddRange(SelectConditions(
+                cg.Element(Ns + "conditions")?.Elements(Ns + "condition") ?? []));
+        }
+
+        return (modifiers, allConditions.Count > 0 ? JsonSerializer.Serialize(allConditions) : null);
     }
 }
