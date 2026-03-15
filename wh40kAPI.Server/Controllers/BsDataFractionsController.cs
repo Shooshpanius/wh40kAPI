@@ -143,10 +143,13 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     }
 
     /// <summary>
-    /// Returns the list of detachment names available for the given fraction.
+    /// Returns the list of detachments available for the given fraction,
+    /// each with its BSData entry <c>id</c> and human-readable <c>name</c>.
+    /// The <c>id</c> matches the <c>childId</c> used in
+    /// <c>modifierGroups.conditions</c> of unit tree nodes.
     /// </summary>
     [HttpGet("{id}/detachments")]
-    public async Task<ActionResult<IEnumerable<string>>> GetDetachments(string id)
+    public async Task<ActionResult<IEnumerable<BsDataDetachmentInfo>>> GetDetachments(string id)
     {
         if (!await db.Catalogues.AnyAsync(c => c.Id == id && !c.Library))
             return NotFound();
@@ -164,7 +167,7 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             .ToListAsync();
 
         if (detachmentRootIds.Count == 0)
-            return Ok(Array.Empty<string>());
+            return Ok(Array.Empty<BsDataDetachmentInfo>());
 
         // Step 2: child selectionEntryGroup nodes
         var groupIds = await db.Units
@@ -176,18 +179,17 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             .ToListAsync();
 
         if (groupIds.Count == 0)
-            return Ok(Array.Empty<string>());
+            return Ok(Array.Empty<BsDataDetachmentInfo>());
 
-        // Step 3: detachment names — children of selectionEntryGroup
-        var names = await db.Units
+        // Step 3: detachment entries — children of selectionEntryGroup
+        var detachments = await db.Units
             .AsNoTracking()
             .Where(u => u.ParentId != null && groupIds.Contains(u.ParentId))
             .OrderBy(u => u.Name)
-            .Select(u => u.Name)
-            .Distinct()
+            .Select(u => new BsDataDetachmentInfo { Id = u.Id, Name = u.Name })
             .ToListAsync();
 
-        return Ok(names);
+        return Ok(detachments.DistinctBy(d => d.Id));
     }
 
     /// <summary>
