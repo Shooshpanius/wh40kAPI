@@ -210,6 +210,53 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
                          && u.Categories.Any(c => c.Name == "Configuration"))
                 .Select(u => u.Id)
                 .ToListAsync();
+
+            // When multiple detachment roots are found from different linked catalogues
+            // (e.g. Space Marines, Agents of the Imperium, and Imperial Knights Library
+            // are all reachable from Blood Angels), keep only the "topmost" roots —
+            // those whose catalogue is NOT itself reachable via catalogueLinks from any
+            // other catalogue that also owns a detachment root in this set.
+            //
+            // Example: Space Marines links to both Agents of the Imperium and Imperial
+            // Knights Library, so those two are "lower" in the hierarchy.  Filtering
+            // them out leaves only the Space Marines root, which is the correct one
+            // for Blood Angels and every other Space Marines sub-chapter.
+            if (detachmentRootIds.Count > 1)
+            {
+                // Find which catalogue each found root belongs to.
+                var rootCatalogueMap = await db.Units
+                    .AsNoTracking()
+                    .Where(u => detachmentRootIds.Contains(u.Id))
+                    .Select(u => new { u.Id, u.CatalogueId })
+                    .ToListAsync();
+
+                var rootCatalogueIds = rootCatalogueMap
+                    .Select(r => r.CatalogueId)
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                if (rootCatalogueIds.Count > 1)
+                {
+                    // Among those catalogues, find which ones are linked-to by others
+                    // in the same set (directly or transitively).
+                    var lowerCatalogueIds = await db.CatalogueLinks
+                        .AsNoTracking()
+                        .Where(l => rootCatalogueIds.Contains(l.CatalogueId)
+                                 && rootCatalogueIds.Contains(l.TargetId))
+                        .Select(l => l.TargetId)
+                        .Distinct()
+                        .ToListAsync();
+
+                    if (lowerCatalogueIds.Count > 0 && lowerCatalogueIds.Count < rootCatalogueIds.Count)
+                    {
+                        var lowerSet = new HashSet<string>(lowerCatalogueIds, StringComparer.OrdinalIgnoreCase);
+                        detachmentRootIds = rootCatalogueMap
+                            .Where(r => !lowerSet.Contains(r.CatalogueId))
+                            .Select(r => r.Id)
+                            .ToList();
+                    }
+                }
+            }
         }
 
         if (detachmentRootIds.Count == 0)
