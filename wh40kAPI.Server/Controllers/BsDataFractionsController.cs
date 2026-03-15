@@ -155,7 +155,7 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             return NotFound();
 
         // Step 1: root Detachment nodes: entryType="upgrade", parentId=null, category="Configuration"
-        // Only search the fraction's own catalogue to avoid picking up detachments
+        // First search the faction's own catalogue to avoid picking up detachments
         // from linked shared catalogues (e.g. generic CSM detachments appearing for Death Guard).
         var detachmentRootIds = await db.Units
             .AsNoTracking()
@@ -165,6 +165,22 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
                      && u.Categories.Any(c => c.Name == "Configuration"))
             .Select(u => u.Id)
             .ToListAsync();
+
+        // Fallback: some factions (e.g. Chaos Daemons) define their Detachment entry
+        // in a shared library catalogue rather than directly in their own catalogue.
+        // In that case, search all catalogues reachable via catalogueLinks.
+        if (detachmentRootIds.Count == 0)
+        {
+            var linkedCatalogueIds = await CollectCatalogueIdsAsync(id);
+            detachmentRootIds = await db.Units
+                .AsNoTracking()
+                .Where(u => linkedCatalogueIds.Contains(u.CatalogueId)
+                         && u.EntryType == "upgrade"
+                         && u.ParentId == null
+                         && u.Categories.Any(c => c.Name == "Configuration"))
+                .Select(u => u.Id)
+                .ToListAsync();
+        }
 
         if (detachmentRootIds.Count == 0)
             return Ok(Array.Empty<BsDataDetachmentInfo>());
