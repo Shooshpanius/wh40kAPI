@@ -115,13 +115,42 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             units.SelectMany(u => u.EntryLinks.Select(l => l.TargetId)),
             StringComparer.OrdinalIgnoreCase);
 
+        // Load catalogue-level entryLinks (root entryLinks) with detachment conditions
+        // for all catalogues in the hierarchy.  These are used below to mark root nodes
+        // that are only available when a specific detachment is selected.
+        var catalogueLevelEntryLinksWithConditions = await db.CatalogueLevelEntryLinks
+            .AsNoTracking()
+            .Where(l => catalogueIds.Contains(l.CatalogueId)
+                     && l.DetachmentModifiers != null
+                     && l.DetachmentConditions != null)
+            .ToListAsync();
+        // Build a lookup: targetId → (DetachmentModifiers, DetachmentConditions).
+        // When the same target is referenced by multiple catalogue-level entryLinks
+        // (e.g. via different catalogues in the hierarchy), the first one wins.
+        var catalogueLevelDetachmentByTarget = catalogueLevelEntryLinksWithConditions
+            .GroupBy(l => l.TargetId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.First(),
+                StringComparer.OrdinalIgnoreCase);
+
         var roots = new List<BsDataUnitNode>();
         foreach (var node in nodeById.Values)
         {
             if (node.ParentId is not null && nodeById.TryGetValue(node.ParentId, out var parent))
                 parent.Children.Add(node);
             else if (!entryLinkTargets.Contains(node.Id))
-                roots.Add(node);
+            {
+                // When the unit is added via a root catalogue-level entryLink that carries
+                // a detachment dependency, present it as hidden by default with a detachment-
+                // unlock modifierGroup — mirroring the same logic applied to unit-level entryLinks.
+                if (catalogueLevelDetachmentByTarget.TryGetValue(node.Id, out var rootLink)
+                    && rootLink.DetachmentModifiers is not null
+                    && rootLink.DetachmentConditions is not null)
+                    roots.Add(BsDataUnitNode.WithDetachmentDependency(node, rootLink.DetachmentModifiers, rootLink.DetachmentConditions));
+                else
+                    roots.Add(node);
+            }
             // else: shared entry reachable only via entryLinks — attached below
         }
 
