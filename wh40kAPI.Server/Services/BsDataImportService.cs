@@ -654,30 +654,9 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         // Extract cost tiers from direct <modifiers> (not inside <modifierGroups>).
         // Units with multiple cost tiers have <modifier type="set" field="{pts_typeId}" value="...">
         // with a condition on the number of models (field="selections" childId="model").
-        // Also extract hidden-visibility conditions used to filter detachment entries by faction:
-        // <modifier type="set" field="hidden" value="true"> with a single
-        // <condition scope="primary-catalogue"> child means this entry is only shown
-        // (or hidden) when the primary catalogue matches the condition's childId.
-        foreach (var mod in entry.Element(Ns + "modifiers")?.Elements(Ns + "modifier") ?? Enumerable.Empty<XElement>())
-        {
-            if (!string.Equals(mod.Attribute("type")?.Value, "set", StringComparison.OrdinalIgnoreCase)) continue;
-            if (!string.Equals(mod.Attribute("field")?.Value, "hidden", StringComparison.OrdinalIgnoreCase)) continue;
-            if (!string.Equals(mod.Attribute("value")?.Value, "true", StringComparison.OrdinalIgnoreCase)) continue;
-
-            foreach (var cond in mod.Element(Ns + "conditions")?.Elements(Ns + "condition") ?? Enumerable.Empty<XElement>())
-            {
-                if (!string.Equals(cond.Attribute("scope")?.Value, "primary-catalogue", StringComparison.OrdinalIgnoreCase)) continue;
-                var condType = cond.Attribute("type")?.Value;
-                var childId = cond.Attribute("childId")?.Value;
-                if (string.IsNullOrEmpty(condType) || string.IsNullOrEmpty(childId)) continue;
-                detachmentVisibilities.Add(new BsDataDetachmentVisibility
-                {
-                    UnitId = unitId,
-                    ConditionType = condType,
-                    CatalogueId = childId,
-                });
-            }
-        }
+        // Also extract hidden-visibility conditions used to filter detachment entries by faction
+        // (see ParseDetachmentVisibilities for details).
+        detachmentVisibilities.AddRange(ParseDetachmentVisibilities(entry, unitId));
 
         var ptsTypeId = entry
             .Element(Ns + "costs")
@@ -884,6 +863,35 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             ?.Elements(Ns + "selectionEntryGroup") ?? Enumerable.Empty<XElement>())
         {
             ExtractEntry(group, catalogueId, unitId, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, detachmentVisibilities, seenUnitIds, depth + 1);
+        }
+    }
+
+    /// <summary>
+    /// Parses direct <c>&lt;modifiers&gt;/&lt;modifier type="set" field="hidden" value="true"&gt;</c>
+    /// elements on a selection entry and returns any <c>scope="primary-catalogue"</c> conditions
+    /// as <see cref="BsDataDetachmentVisibility"/> records.
+    /// </summary>
+    private static IEnumerable<BsDataDetachmentVisibility> ParseDetachmentVisibilities(XElement entry, string unitId)
+    {
+        foreach (var mod in entry.Element(Ns + "modifiers")?.Elements(Ns + "modifier") ?? Enumerable.Empty<XElement>())
+        {
+            if (!string.Equals(mod.Attribute("type")?.Value, "set", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(mod.Attribute("field")?.Value, "hidden", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(mod.Attribute("value")?.Value, "true", StringComparison.OrdinalIgnoreCase)) continue;
+
+            foreach (var cond in mod.Element(Ns + "conditions")?.Elements(Ns + "condition") ?? Enumerable.Empty<XElement>())
+            {
+                if (!string.Equals(cond.Attribute("scope")?.Value, "primary-catalogue", StringComparison.OrdinalIgnoreCase)) continue;
+                var condType = cond.Attribute("type")?.Value;
+                var childId = cond.Attribute("childId")?.Value;
+                if (string.IsNullOrEmpty(condType) || string.IsNullOrEmpty(childId)) continue;
+                yield return new BsDataDetachmentVisibility
+                {
+                    UnitId = unitId,
+                    ConditionType = condType,
+                    CatalogueId = childId,
+                };
+            }
         }
     }
 }
