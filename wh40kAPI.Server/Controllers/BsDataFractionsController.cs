@@ -168,10 +168,12 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
 
         // Fallback: some factions (e.g. Chaos Daemons) define their Detachment entry
         // in a shared library catalogue rather than directly in their own catalogue.
-        // In that case, search all catalogues reachable via catalogueLinks.
+        // Only follow catalogueLinks where importRootEntries=true so that faction
+        // catalogues linked without importRootEntries (e.g. Chaos Space Marines linked
+        // from Chaos Daemons) do not contribute their own detachment roots.
         if (detachmentRootIds.Count == 0)
         {
-            var linkedCatalogueIds = await CollectCatalogueIdsAsync(id);
+            var linkedCatalogueIds = await CollectCatalogueIdsAsync(id, importRootEntriesOnly: true);
             detachmentRootIds = await db.Units
                 .AsNoTracking()
                 .Where(u => linkedCatalogueIds.Contains(u.CatalogueId)
@@ -213,14 +215,21 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     /// by following catalogueLinks recursively.
     /// Loads all catalogue links in a single query then traverses them in memory.
     /// </summary>
-    private async Task<HashSet<string>> CollectCatalogueIdsAsync(string rootId)
+    /// <param name="rootId">The starting catalogue ID.</param>
+    /// <param name="importRootEntriesOnly">
+    /// When <c>true</c>, only follows links where <c>importRootEntries=true</c>,
+    /// preventing detachments from catalogues that don't export their root entries
+    /// from appearing in results (e.g. Chaos Space Marines linked from Chaos Daemons).
+    /// </param>
+    private async Task<HashSet<string>> CollectCatalogueIdsAsync(string rootId, bool importRootEntriesOnly = false)
     {
         // Load all links once to avoid N+1 queries during traversal.
         var allLinks = await db.CatalogueLinks.AsNoTracking()
-            .Select(l => new { l.CatalogueId, l.TargetId })
+            .Select(l => new { l.CatalogueId, l.TargetId, l.ImportRootEntries })
             .ToListAsync();
 
         var linkMap = allLinks
+            .Where(l => !importRootEntriesOnly || l.ImportRootEntries)
             .GroupBy(l => l.CatalogueId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Select(l => l.TargetId).ToList(), StringComparer.OrdinalIgnoreCase);
 
