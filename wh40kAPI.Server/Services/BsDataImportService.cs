@@ -580,6 +580,17 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             if (string.IsNullOrEmpty(linkId)) continue;
             var targetId = el.Attribute("targetId")?.Value ?? "";
             if (string.IsNullOrEmpty(targetId)) continue;
+
+            // Detect detachment-dependency pattern:
+            // <modifier type="set" value="true" field="hidden">
+            //   <conditionGroups><conditionGroup type="and"><conditions>
+            //     <condition scope="roster" field="selections" type="lessThan" value="1" childId="<DETACHMENT-ID>"/>
+            //   </conditions></conditionGroup></conditionGroups>
+            // </modifier>
+            // When found, store the inverted unlock modifier/condition so GetUnitsTree can
+            // present the unit as hidden-by-default with a detachment-unlock modifierGroup.
+            var (detachmentModifiers, detachmentConditions) = ParseEntryLinkDetachmentDependency(el);
+
             entryLinks.Add(new BsDataEntryLink
             {
                 Id = linkId,
@@ -588,6 +599,8 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 Hidden = string.Equals(el.Attribute("hidden")?.Value, "true", StringComparison.OrdinalIgnoreCase),
                 TargetId = targetId,
                 Type = el.Attribute("type")?.Value,
+                DetachmentModifiers = detachmentModifiers,
+                DetachmentConditions = detachmentConditions,
             });
         }
 
@@ -893,5 +906,73 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 };
             }
         }
+    }
+
+    /// <summary>
+    /// Detects the "hide unless detachment selected" pattern on an <c>&lt;entryLink&gt;</c> element
+    /// and returns the inverted unlock <c>(modifiers, conditions)</c> JSON strings to store on the
+    /// <see cref="BsDataEntryLink"/>.  Returns <c>(null, null)</c> if the pattern is absent.
+    /// <para>
+    /// Pattern detected:
+    /// <code>
+    /// &lt;modifier type="set" value="true" field="hidden"&gt;
+    ///   &lt;conditionGroups&gt;&lt;conditionGroup type="and"&gt;&lt;conditions&gt;
+    ///     &lt;condition scope="roster" field="selections" type="lessThan" value="1" childId="&lt;DETACHMENT-ID&gt;"/&gt;
+    ///   &lt;/conditions&gt;&lt;/conditionGroup&gt;&lt;/conditionGroups&gt;
+    /// &lt;/modifier&gt;
+    /// </code>
+    /// Conditions with <c>field="forces"</c> (Crusade mode marker) are ignored because they
+    /// never apply in standard matched-play and do not represent detachment restrictions.
+    /// </para>
+    /// </summary>
+    private static (string? Modifiers, string? Conditions) ParseEntryLinkDetachmentDependency(XElement entryLink)
+    {
+        foreach (var mod in entryLink.Element(Ns + "modifiers")?.Elements(Ns + "modifier") ?? Enumerable.Empty<XElement>())
+        {
+            if (!string.Equals(mod.Attribute("type")?.Value, "set", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(mod.Attribute("field")?.Value, "hidden", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(mod.Attribute("value")?.Value, "true", StringComparison.OrdinalIgnoreCase)) continue;
+
+            // Look inside conditionGroups/conditionGroup[@type='and']/conditions
+            var conditionGroups = mod.Element(Ns + "conditionGroups");
+            if (conditionGroups == null) continue;
+
+            foreach (var group in conditionGroups.Elements(Ns + "conditionGroup"))
+            {
+                if (!string.Equals(group.Attribute("type")?.Value, "and", StringComparison.OrdinalIgnoreCase)) continue;
+
+                // Collect only roster+selections conditions (detachment references).
+                // Ignore field="forces" conditions (Crusade mode — never active in matched play).
+                var rosterConditions = group
+                    .Element(Ns + "conditions")
+                    ?.Elements(Ns + "condition")
+                    .Where(c =>
+                        string.Equals(c.Attribute("scope")?.Value, "roster", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(c.Attribute("field")?.Value, "selections", StringComparison.OrdinalIgnoreCase))
+                    .Select(c => new
+                    {
+                        field = c.Attribute("field")?.Value,
+                        scope = c.Attribute("scope")?.Value,
+                        // Invert: lessThan 1 (not selected) → atLeast 1 (selected)
+                        type = "atLeast",
+                        value = "1",
+                        childId = c.Attribute("childId")?.Value,
+                    })
+                    .Where(c => !string.IsNullOrEmpty(c.childId))
+                    .ToList();
+
+                if (rosterConditions is { Count: > 0 })
+                {
+                    var unlockModifiers = JsonSerializer.Serialize(new[]
+                    {
+                        new { field = "hidden", type = "set", value = "false" },
+                    });
+                    var unlockConditions = JsonSerializer.Serialize(rosterConditions);
+                    return (unlockModifiers, unlockConditions);
+                }
+            }
+        }
+
+        return (null, null);
     }
 }
