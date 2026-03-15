@@ -631,6 +631,16 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             });
         }
 
+        // Build a map of constraint id → constraint type ("min"/"max") for this entry so that
+        // modifiers referencing a constraint by GUID can be exported with a specific type
+        // ("set-min" / "set-max") instead of the generic "set".
+        var constraintTypeById = (entry.Element(Ns + "constraints")?.Elements(Ns + "constraint") ?? [])
+            .Where(c => c.Attribute("id")?.Value is { Length: > 0 })
+            .ToDictionary(
+                c => c.Attribute("id")?.Value ?? string.Empty,
+                c => c.Attribute("type")?.Value ?? "",
+                StringComparer.OrdinalIgnoreCase);
+
         // Extract modifierGroups
         foreach (var mg in entry
             .Element(Ns + "modifierGroups")
@@ -639,12 +649,19 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             var modifiers = mg
                 .Element(Ns + "modifiers")
                 ?.Elements(Ns + "modifier")
-                .Select(m => new
+                .Select(m =>
                 {
-                    id = m.Attribute("id")?.Value,
-                    field = m.Attribute("field")?.Value,
-                    type = m.Attribute("type")?.Value,
-                    value = m.Attribute("value")?.Value,
+                    var type = m.Attribute("type")?.Value;
+                    var field = m.Attribute("field")?.Value;
+                    if (type == "set" && field is not null && constraintTypeById.TryGetValue(field, out var cType))
+                        type = cType == "min" ? "set-min" : cType == "max" ? "set-max" : type;
+                    return new
+                    {
+                        id = m.Attribute("id")?.Value,
+                        field,
+                        type,
+                        value = m.Attribute("value")?.Value,
+                    };
                 })
                 .ToList();
 
@@ -678,7 +695,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         // <conditionGroups>/<conditionGroup>/<conditions>.
         foreach (var mod in entry.Element(Ns + "modifiers")?.Elements(Ns + "modifier") ?? Enumerable.Empty<XElement>())
         {
-            var (entryModJson, entryCondJson) = ExtractModifierAsGroup(mod);
+            var (entryModJson, entryCondJson) = ExtractModifierAsGroup(mod, constraintTypeById);
             modifierGroups.Add(new BsDataModifierGroup
             {
                 UnitId = unitId,
@@ -1006,15 +1023,22 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
     /// Conditions are collected from both direct <c>&lt;conditions&gt;</c> and from
     /// <c>&lt;conditionGroups&gt;/&lt;conditionGroup&gt;/&lt;conditions&gt;</c>.
     /// </summary>
-    private static (string Modifiers, string? Conditions) ExtractModifierAsGroup(XElement mod)
+    private static (string Modifiers, string? Conditions) ExtractModifierAsGroup(
+        XElement mod,
+        IReadOnlyDictionary<string, string>? constraintTypeById = null)
     {
+        var type = mod.Attribute("type")?.Value;
+        var field = mod.Attribute("field")?.Value;
+        if (type == "set" && field is not null && constraintTypeById?.TryGetValue(field, out var cType) == true)
+            type = cType == "min" ? "set-min" : cType == "max" ? "set-max" : type;
+
         var modifiers = JsonSerializer.Serialize(new[]
         {
             new
             {
                 id = mod.Attribute("id")?.Value,
-                field = mod.Attribute("field")?.Value,
-                type = mod.Attribute("type")?.Value,
+                field,
+                type,
                 value = mod.Attribute("value")?.Value,
             },
         });

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using wh40kAPI.Server.Data;
 using wh40kAPI.Server.Models.BsData;
 
@@ -152,6 +153,28 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
                     roots.Add(node);
             }
             // else: shared entry reachable only via entryLinks — attached below
+        }
+
+        // Populate RequiredUpgrades for nodes that have upgrade children with minInRoster > 0
+        // and a detachment-hide condition.  This is done after the parent-child hierarchy is
+        // built so that Children collections are complete before we inspect them.
+        foreach (var node in nodeById.Values)
+        {
+            var requiredUpgrades = node.Children
+                .Where(c => c.EntryType == "upgrade" && c.MinInRoster > 0)
+                .Select(c => new BsDataRequiredUpgrade
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    MinInRoster = c.MinInRoster,
+                    MaxInRoster = c.MaxInRoster,
+                    RequiredDetachmentId = ExtractRequiredDetachmentId(c.ModifierGroups),
+                })
+                .Where(r => r.RequiredDetachmentId is not null)
+                .ToList();
+
+            if (requiredUpgrades.Count > 0)
+                node.RequiredUpgrades = requiredUpgrades;
         }
 
         // Resolve entry links: attach each linked entry as a child of the linking node.
@@ -373,6 +396,55 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
         }
 
         return Ok(detachments.DistinctBy(d => d.Id));
+    }
+
+    /// <summary>
+    /// Inspects a node's <see cref="BsDataModifierGroup"/> collection and returns the
+    /// detachment entry id that is required to "un-hide" the entry, or <c>null</c> if no
+    /// such dependency is found.
+    /// <para>
+    /// The pattern looked for: a modifier group whose <c>modifiers</c> JSON contains an entry
+    /// with <c>field="hidden"</c> and <c>value="true"</c>, and whose <c>conditions</c> JSON
+    /// contains a condition with a non-empty <c>childId</c> — that childId is the detachment id.
+    /// </para>
+    /// </summary>
+    private static string? ExtractRequiredDetachmentId(ICollection<BsDataModifierGroup> modifierGroups)
+    {
+        foreach (var mg in modifierGroups)
+        {
+            if (mg.Modifiers is null || mg.Conditions is null)
+                continue;
+
+            try
+            {
+                using var modDoc = JsonDocument.Parse(mg.Modifiers);
+                var setsHiddenTrue = modDoc.RootElement.EnumerateArray().Any(m =>
+                    m.TryGetProperty("field", out var f) &&
+                    f.ValueKind == JsonValueKind.String &&
+                    string.Equals(f.GetString(), "hidden", StringComparison.OrdinalIgnoreCase) &&
+                    m.TryGetProperty("value", out var v) &&
+                    v.ValueKind == JsonValueKind.String &&
+                    string.Equals(v.GetString(), "true", StringComparison.OrdinalIgnoreCase));
+
+                if (!setsHiddenTrue)
+                    continue;
+
+                using var condDoc = JsonDocument.Parse(mg.Conditions);
+                foreach (var cond in condDoc.RootElement.EnumerateArray())
+                {
+                    if (cond.TryGetProperty("childId", out var childId) &&
+                        childId.ValueKind == JsonValueKind.String &&
+                        childId.GetString() is { Length: > 0 } detachmentId)
+                        return detachmentId;
+                }
+            }
+            catch (JsonException)
+            {
+                // Skip malformed JSON — should not happen with well-formed import data.
+            }
+        }
+
+        return null;
     }
 
     /// <summary>

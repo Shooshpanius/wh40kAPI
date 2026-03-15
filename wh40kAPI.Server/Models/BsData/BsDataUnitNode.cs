@@ -29,6 +29,14 @@ public class BsDataUnitNode
     public ICollection<BsDataModifierGroup> ModifierGroups { get; set; } = [];
     /// <summary>Direct children of this entry in the selection-entry hierarchy.</summary>
     public ICollection<BsDataUnitNode> Children { get; set; } = [];
+    /// <summary>
+    /// Upgrade children that have a roster-level minimum constraint and are gated behind a
+    /// specific detachment.  Populated for entries (e.g. <c>entryType="model"</c>) whose
+    /// upgrade sub-entries carry <c>minInRoster &gt; 0</c> and a detachment-hide condition,
+    /// so that API consumers can surface the requirement without traversing <see cref="Children"/>.
+    /// <c>null</c> when no such children exist.
+    /// </summary>
+    public ICollection<BsDataRequiredUpgrade>? RequiredUpgrades { get; set; }
 
     public static BsDataUnitNode FromUnit(BsDataUnit unit) => new()
     {
@@ -79,5 +87,6 @@ public class BsDataUnitNode
         CostTiers = source.CostTiers,
         Children = source.Children,
         ModifierGroups = [.. source.ModifierGroups, new BsDataModifierGroup { UnitId = source.Id, Modifiers = modifiers, Conditions = conditions }],
+        RequiredUpgrades = source.RequiredUpgrades,
     };
 }
