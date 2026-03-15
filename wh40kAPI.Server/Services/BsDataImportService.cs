@@ -391,6 +391,9 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         // entries (e.g. the Detachment root) a faction explicitly imports and are
         // used by GetDetachments to resolve the correct detachment root when it
         // lives in a library catalogue rather than in the faction's own catalogue.
+        // Detachment-dependency conditions (hide-unless-detachment pattern) are also
+        // parsed here so that GetUnitsTree can apply WithDetachmentDependency to units
+        // that are only available when a specific detachment is selected.
         var seenCatalogueEntryLinkTargets = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var el in root
             .Element(Ns + "entryLinks")
@@ -399,10 +402,13 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             var targetId = el.Attribute("targetId")?.Value;
             if (string.IsNullOrEmpty(targetId)) continue;
             if (!seenCatalogueEntryLinkTargets.Add(targetId)) continue;
+            var (detachmentModifiers, detachmentConditions) = ParseEntryLinkDetachmentDependency(el);
             catalogueLevelEntryLinks.Add(new BsDataCatalogueEntryLink
             {
                 CatalogueId = id,
                 TargetId = targetId,
+                DetachmentModifiers = detachmentModifiers,
+                DetachmentConditions = detachmentConditions,
             });
         }
 
