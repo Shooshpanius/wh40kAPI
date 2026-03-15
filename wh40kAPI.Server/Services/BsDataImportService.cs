@@ -32,6 +32,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         int totalEntryLinks = 0;
         int totalConstraints = 0;
         int totalModifierGroups = 0;
+        int totalDetachmentVisibilities = 0;
         int totalCostTiers = 0;
         int totalRules = 0;
         int totalCatalogueLinks = 0;
@@ -54,7 +55,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             {
                 logger.LogInformation("Importing {File}", fileName);
                 var xml = await client.GetStringAsync(downloadUrl);
-                var (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, rules, catalogueLinks, catalogueLevelEntryLinks) = ParseCatalogueXml(xml);
+                var (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, rules, catalogueLinks, catalogueLevelEntryLinks, detachmentVisibilities) = ParseCatalogueXml(xml);
 
                 if (catalogue == null) continue;
 
@@ -132,6 +133,9 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 // filter only for accepted units.
                 var newModifierGroups = modifierGroups.Where(g => acceptedUnitIds.Contains(g.UnitId)).ToList();
 
+                // DetachmentVisibilities also use a DB-generated int PK; filter for accepted units.
+                var newDetachmentVisibilities = detachmentVisibilities.Where(v => acceptedUnitIds.Contains(v.UnitId)).ToList();
+
                 // CostTiers also use a DB-generated int PK; filter for accepted units.
                 var newCostTiers = costTiers.Where(t => acceptedUnitIds.Contains(t.UnitId)).ToList();
 
@@ -180,6 +184,9 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 if (newModifierGroups.Count > 0)
                     db.ModifierGroups.AddRange(newModifierGroups);
 
+                if (newDetachmentVisibilities.Count > 0)
+                    db.DetachmentVisibilities.AddRange(newDetachmentVisibilities);
+
                 if (newCostTiers.Count > 0)
                     db.CostTiers.AddRange(newCostTiers);
 
@@ -202,6 +209,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 totalEntryLinks += newEntryLinks.Count;
                 totalConstraints += newConstraints.Count;
                 totalModifierGroups += newModifierGroups.Count;
+                totalDetachmentVisibilities += newDetachmentVisibilities.Count;
                 totalCostTiers += newCostTiers.Count;
                 totalRules += newRules.Count;
                 totalCatalogueLinks += newCatalogueLinks.Count;
@@ -217,11 +225,12 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         logger.LogInformation(
             "Import complete. Units: {TotalUnits}, Profiles: {TotalProfiles}, Categories: {TotalCategories}, " +
             "InfoLinks: {TotalInfoLinks}, EntryLinks: {TotalEntryLinks}, Constraints: {TotalConstraints}, " +
-            "ModifierGroups: {TotalModifierGroups}, CostTiers: {TotalCostTiers}, Rules: {TotalRules}, " +
+            "ModifierGroups: {TotalModifierGroups}, DetachmentVisibilities: {TotalDetachmentVisibilities}, " +
+            "CostTiers: {TotalCostTiers}, Rules: {TotalRules}, " +
             "CatalogueLinks: {TotalCatalogueLinks}, CatalogueLevelEntryLinks: {TotalCatalogueLevelEntryLinks}",
             totalUnits, totalProfiles, totalCategories, totalInfoLinks, totalEntryLinks,
-            totalConstraints, totalModifierGroups, totalCostTiers, totalRules, totalCatalogueLinks,
-            totalCatalogueLevelEntryLinks);
+            totalConstraints, totalModifierGroups, totalDetachmentVisibilities, totalCostTiers,
+            totalRules, totalCatalogueLinks, totalCatalogueLevelEntryLinks);
         return totalUnits;
     }
 
@@ -265,15 +274,16 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         List<BsDataCostTier> CostTiers,
         List<BsDataRule> Rules,
         List<BsDataCatalogueLink> CatalogueLinks,
-        List<BsDataCatalogueEntryLink> CatalogueLevelEntryLinks)
+        List<BsDataCatalogueEntryLink> CatalogueLevelEntryLinks,
+        List<BsDataDetachmentVisibility> DetachmentVisibilities)
         ParseCatalogueXml(string xml)
     {
         XDocument doc;
         try { doc = XDocument.Parse(xml); }
-        catch { return (null, [], [], [], [], [], [], [], [], [], [], []); }
+        catch { return (null, [], [], [], [], [], [], [], [], [], [], [], []); }
 
         var root = doc.Root;
-        if (root == null) return (null, [], [], [], [], [], [], [], [], [], [], []);
+        if (root == null) return (null, [], [], [], [], [], [], [], [], [], [], [], []);
 
         var id = root.Attribute("id")?.Value ?? "";
         var name = root.Attribute("name")?.Value ?? "";
@@ -313,6 +323,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         var rules = new List<BsDataRule>();
         var catalogueLinks = new List<BsDataCatalogueLink>();
         var catalogueLevelEntryLinks = new List<BsDataCatalogueEntryLink>();
+        var detachmentVisibilities = new List<BsDataDetachmentVisibility>();
         var seenUnitIds = new HashSet<string>();
 
         // Parse sharedSelectionEntries (top-level reusable units/models)
@@ -320,7 +331,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .Element(Ns + "sharedSelectionEntries")
             ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
-            ExtractEntry(entry, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, seenUnitIds);
+            ExtractEntry(entry, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, detachmentVisibilities, seenUnitIds);
         }
 
         // Parse sharedSelectionEntryGroups (top-level reusable option groups)
@@ -328,7 +339,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .Element(Ns + "sharedSelectionEntryGroups")
             ?.Elements(Ns + "selectionEntryGroup") ?? Enumerable.Empty<XElement>())
         {
-            ExtractEntry(group, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, seenUnitIds);
+            ExtractEntry(group, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, detachmentVisibilities, seenUnitIds);
         }
 
         // Also parse top-level selectionEntries (force org slots, etc.)
@@ -336,7 +347,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .Element(Ns + "selectionEntries")
             ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
-            ExtractEntry(entry, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, seenUnitIds);
+            ExtractEntry(entry, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, detachmentVisibilities, seenUnitIds);
         }
 
         // Parse sharedRules (catalogue-level rules/abilities)
@@ -395,7 +406,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             });
         }
 
-        return (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, rules, catalogueLinks, catalogueLevelEntryLinks);
+        return (catalogue, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, rules, catalogueLinks, catalogueLevelEntryLinks, detachmentVisibilities);
     }
 
     private static void ExtractRule(XElement rule, string catalogueId, List<BsDataRule> rules)
@@ -427,6 +438,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         List<BsDataConstraint> constraints,
         List<BsDataModifierGroup> modifierGroups,
         List<BsDataCostTier> costTiers,
+        List<BsDataDetachmentVisibility> detachmentVisibilities,
         HashSet<string> seenUnitIds,
         int depth = 0)
     {
@@ -642,6 +654,31 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         // Extract cost tiers from direct <modifiers> (not inside <modifierGroups>).
         // Units with multiple cost tiers have <modifier type="set" field="{pts_typeId}" value="...">
         // with a condition on the number of models (field="selections" childId="model").
+        // Also extract hidden-visibility conditions used to filter detachment entries by faction:
+        // <modifier type="set" field="hidden" value="true"> with a single
+        // <condition scope="primary-catalogue"> child means this entry is only shown
+        // (or hidden) when the primary catalogue matches the condition's childId.
+        foreach (var mod in entry.Element(Ns + "modifiers")?.Elements(Ns + "modifier") ?? Enumerable.Empty<XElement>())
+        {
+            if (!string.Equals(mod.Attribute("type")?.Value, "set", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(mod.Attribute("field")?.Value, "hidden", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(mod.Attribute("value")?.Value, "true", StringComparison.OrdinalIgnoreCase)) continue;
+
+            foreach (var cond in mod.Element(Ns + "conditions")?.Elements(Ns + "condition") ?? Enumerable.Empty<XElement>())
+            {
+                if (!string.Equals(cond.Attribute("scope")?.Value, "primary-catalogue", StringComparison.OrdinalIgnoreCase)) continue;
+                var condType = cond.Attribute("type")?.Value;
+                var childId = cond.Attribute("childId")?.Value;
+                if (string.IsNullOrEmpty(condType) || string.IsNullOrEmpty(childId)) continue;
+                detachmentVisibilities.Add(new BsDataDetachmentVisibility
+                {
+                    UnitId = unitId,
+                    ConditionType = condType,
+                    CatalogueId = childId,
+                });
+            }
+        }
+
         var ptsTypeId = entry
             .Element(Ns + "costs")
             ?.Elements(Ns + "cost")
@@ -838,7 +875,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .Element(Ns + "selectionEntries")
             ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
-            ExtractEntry(nested, catalogueId, unitId, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, seenUnitIds, depth + 1);
+            ExtractEntry(nested, catalogueId, unitId, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, detachmentVisibilities, seenUnitIds, depth + 1);
         }
 
         // Recursively extract selectionEntryGroups (groups of options)
@@ -846,7 +883,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .Element(Ns + "selectionEntryGroups")
             ?.Elements(Ns + "selectionEntryGroup") ?? Enumerable.Empty<XElement>())
         {
-            ExtractEntry(group, catalogueId, unitId, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, seenUnitIds, depth + 1);
+            ExtractEntry(group, catalogueId, unitId, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, detachmentVisibilities, seenUnitIds, depth + 1);
         }
     }
 }
