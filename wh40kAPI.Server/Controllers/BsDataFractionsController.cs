@@ -33,6 +33,20 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     }
 
     /// <summary>
+    /// Returns the fraction's own catalogue ids: the fraction's id itself plus every catalogueId
+    /// reachable from it via catalogueLinks with importRootEntries=true (resolved recursively).
+    /// </summary>
+    [HttpGet("{id}/ownCatalogues")]
+    public async Task<ActionResult<IEnumerable<string>>> GetOwnCatalogues(string id)
+    {
+        if (!await db.Catalogues.AnyAsync(c => c.Id == id && !c.Library))
+            return NotFound();
+
+        var ownIds = await CollectCatalogueIdsAsync(id, importRootEntriesOnly: true);
+        return Ok(ownIds);
+    }
+
+    /// <summary>
     /// Returns all units belonging to the fraction — units from the fraction's own catalogue
     /// plus units from every catalogue reachable via catalogueLinks (resolved recursively).
     /// </summary>
