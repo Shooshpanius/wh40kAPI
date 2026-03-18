@@ -247,9 +247,11 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
         // catalogue search because it won't pick up detachment roots from other linked
         // library catalogues (e.g. Chaos Knights Library linked from Chaos Daemons
         // with importRootEntries=true).
+        // Collect catalogue-level entryLink targets once; reused by the sub-check below.
+        var directTargetIds = new List<string>();
         if (detachmentRootIds.Count == 0)
         {
-            var directTargetIds = await db.CatalogueLevelEntryLinks
+            directTargetIds = await db.CatalogueLevelEntryLinks
                 .AsNoTracking()
                 .Where(l => l.CatalogueId == id)
                 .Select(l => l.TargetId)
@@ -266,6 +268,25 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
                     .Select(u => u.Id)
                     .ToListAsync();
             }
+        }
+
+        // Sub-check: some factions (e.g. Adeptus Mechanicus) place the "Configuration"
+        // categoryLink on the catalogue-level entryLink itself rather than on the target
+        // selectionEntry.  In that case the entry won't carry a "Configuration" category
+        // and the check above yields nothing.  Identify such roots by the presence of a
+        // direct selectionEntryGroup child, which is the distinguishing structural trait
+        // of a Detachment root entry.
+        if (detachmentRootIds.Count == 0 && directTargetIds.Count > 0)
+        {
+            detachmentRootIds = await (
+                from parent in db.Units.AsNoTracking()
+                join child in db.Units.AsNoTracking() on parent.Id equals child.ParentId
+                where directTargetIds.Contains(parent.Id)
+                   && parent.EntryType == "upgrade"
+                   && parent.ParentId == null
+                   && child.EntryType == "selectionEntryGroup"
+                select parent.Id
+            ).Distinct().ToListAsync();
         }
 
         // Last-resort fallback: recursively follow catalogueLinks where
