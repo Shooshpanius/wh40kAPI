@@ -6,6 +6,11 @@ interface ApiStatus {
     ktBsData: string | null;
 }
 
+interface VersionInfo {
+    prNumber: number;
+    mergedAt: string;
+}
+
 function formatImportDate(value: string | null | undefined): string {
     if (!value) return 'нет данных';
     const d = new Date(value);
@@ -13,9 +18,16 @@ function formatImportDate(value: string | null | undefined): string {
     return d.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 }
 
+function formatVersionDate(value: string): string {
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return value;
+    return d.toLocaleDateString('ru-RU', { dateStyle: 'short' });
+}
+
 export function StartPage() {
     const [killTeamAvailable, setKillTeamAvailable] = useState(false);
     const [apiStatus, setApiStatus] = useState<ApiStatus | null>(null);
+    const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
 
     useEffect(() => {
         Promise.allSettled([
@@ -28,12 +40,20 @@ export function StartPage() {
                 .then(r => r.ok ? r.json() : Promise.reject(new Error(`${r.status} ${r.statusText}`)))
                 .then((data: ApiStatus) => setApiStatus(data))
                 .catch((e: unknown) => { console.error('Failed to fetch API status:', e); }),
+
+            fetch('/api/version')
+                .then(r => r.ok ? r.json() : Promise.reject(new Error(`${r.status} ${r.statusText}`)))
+                .then((data: VersionInfo) => setVersionInfo(data))
+                .catch((e: unknown) => { console.error('Failed to fetch version info:', e); }),
         ]);
     }, []);
 
     return (
         <div style={styles.container}>
             <h1 style={styles.title}>⚔️ Warhammer 40,000 API Hub</h1>
+            {versionInfo && (
+                <p style={styles.version}>Beta version #0.0.{versionInfo.prNumber} от {formatVersionDate(versionInfo.mergedAt)}</p>
+            )}
             <p style={styles.subtitle}>Выберите один из доступных API</p>
             <div style={styles.cards}>
                 <ApiCard
@@ -104,6 +124,7 @@ function ApiCard({ title, desc, href, available, importDate }: { title: string; 
 const styles: Record<string, React.CSSProperties> = {
     container: { maxWidth: 900, margin: '60px auto', padding: '0 24px', textAlign: 'center' },
     title: { color: '#e8c170', fontSize: '2.2rem', marginBottom: '8px' },
+    version: { color: '#e8c170', fontSize: '0.9rem', marginBottom: '8px', marginTop: 0 },
     subtitle: { color: '#ccc', marginBottom: '40px', fontSize: '1.1rem' },
     cards: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '20px', textAlign: 'center' },
     card: {

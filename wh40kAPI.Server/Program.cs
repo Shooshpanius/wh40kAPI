@@ -124,6 +124,7 @@ builder.Services.AddRateLimiter(options =>
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
 });
 
+builder.Services.AddMemoryCache();
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
         options.JsonSerializerOptions.ReferenceHandler =
