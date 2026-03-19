@@ -12,7 +12,7 @@ namespace wh40kAPI.Server.Controllers;
 [ApiExplorerSettings(IgnoreApi = true)]
 [Route("api/wh40k/[controller]")]
 [EnableRateLimiting("admin")]
-public class AdminController(AppDbContext db, DataImportService importService) : ControllerBase
+public class AdminController(AppDbContext db, DataImportService importService, ILogger<AdminController> logger) : ControllerBase
 {
     /// <summary>
     /// Download the wahapedia Export Data Specs Excel file, follow its CSV links,
@@ -23,8 +23,16 @@ public class AdminController(AppDbContext db, DataImportService importService) :
     [AdminAuth]
     public async Task<IActionResult> ImportData()
     {
-        await importService.ImportFromWahapediaAsync();
-        return Ok(new { message = "Data imported successfully." });
+        try
+        {
+            await importService.ImportFromWahapediaAsync();
+            return Ok(new { message = "Data imported successfully." });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Wahapedia import failed");
+            return StatusCode(500, new { message = ex.Message });
+        }
     }
 
     /// <summary>

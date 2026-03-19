@@ -107,12 +107,13 @@ export function Admin() {
                 method: 'POST',
                 headers: { 'X-Admin-Password': password },
             });
-            const data = await res.json();
+            const text = await res.text();
+            const data = text ? JSON.parse(text) : {};
             if (res.ok) {
                 setImportMsg(data.message ?? 'Import successful!');
                 loadStatus();
             } else {
-                setImportError(data.title ?? data.message ?? 'Import failed.');
+                setImportError(data.title ?? data.message ?? `Import failed (HTTP ${res.status}).`);
             }
         } catch (err) {
             setImportError('Import error: ' + String(err));
@@ -130,12 +131,13 @@ export function Admin() {
                 method: 'POST',
                 headers: { 'X-Admin-Password': password },
             });
-            const data = await res.json();
+            const text = await res.text();
+            const data = text ? JSON.parse(text) : {};
             if (res.ok) {
                 setBsDataMsg(data.message ?? 'Import successful!');
                 loadBsDataStatus();
             } else {
-                setBsDataError(data.title ?? data.message ?? 'Import failed.');
+                setBsDataError(data.title ?? data.message ?? `Import failed (HTTP ${res.status}).`);
             }
         } catch (err) {
             setBsDataError('Import error: ' + String(err));
@@ -153,12 +155,13 @@ export function Admin() {
                 method: 'POST',
                 headers: { 'X-Admin-Password': password },
             });
-            const data = await res.json();
+            const text = await res.text();
+            const data = text ? JSON.parse(text) : {};
             if (res.ok) {
                 setKtBsDataMsg(data.message ?? 'Import successful!');
                 loadKtBsDataStatus();
             } else {
-                setKtBsDataError(data.title ?? data.message ?? 'Import failed.');
+                setKtBsDataError(data.title ?? data.message ?? `Import failed (HTTP ${res.status}).`);
             }
         } catch (err) {
             setKtBsDataError('Import error: ' + String(err));

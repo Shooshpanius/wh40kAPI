@@ -11,7 +11,7 @@ namespace wh40kAPI.Server.Controllers;
 [ApiExplorerSettings(IgnoreApi = true)]
 [Route("api/ktbsdata/admin")]
 [EnableRateLimiting("admin")]
-public class KtBsDataAdminController(KtBsDataDbContext db, KtBsDataImportService importService) : ControllerBase
+public class KtBsDataAdminController(KtBsDataDbContext db, KtBsDataImportService importService, ILogger<KtBsDataAdminController> logger) : ControllerBase
 {
     /// <summary>
     /// Trigger import of Kill Team BSData from the BSData/wh40k-killteam GitHub repository.
@@ -21,8 +21,16 @@ public class KtBsDataAdminController(KtBsDataDbContext db, KtBsDataImportService
     [AdminAuth]
     public async Task<IActionResult> Import()
     {
-        int units = await importService.ImportAsync();
-        return Ok(new { message = $"Kill Team BSData imported successfully. Units: {units}" });
+        try
+        {
+            int units = await importService.ImportAsync();
+            return Ok(new { message = $"Kill Team BSData imported successfully. Units: {units}" });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Kill Team BSData import failed");
+            return StatusCode(500, new { message = ex.Message });
+        }
     }
 
     /// <summary>
