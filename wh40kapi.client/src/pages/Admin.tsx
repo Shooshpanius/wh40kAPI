@@ -23,10 +23,9 @@ export function Admin() {
     const [authError, setAuthError] = useState('');
     const [authLoading, setAuthLoading] = useState(false);
 
-    const [file, setFile] = useState<File | null>(null);
-    const [uploading, setUploading] = useState(false);
-    const [uploadMsg, setUploadMsg] = useState('');
-    const [uploadError, setUploadError] = useState('');
+    const [importing, setImporting] = useState(false);
+    const [importMsg, setImportMsg] = useState('');
+    const [importError, setImportError] = useState('');
 
     const [status, setStatus] = useState<DbStatus | null>(null);
     const [statusLoading, setStatusLoading] = useState(false);
@@ -99,31 +98,26 @@ export function Admin() {
         }
     };
 
-    const handleUpload = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!file) return;
-        setUploading(true);
-        setUploadMsg('');
-        setUploadError('');
-        const formData = new FormData();
-        formData.append('file', file);
+    const handleImport = async () => {
+        setImporting(true);
+        setImportMsg('');
+        setImportError('');
         try {
-            const res = await fetch('/api/wh40k/admin/upload', {
+            const res = await fetch('/api/wh40k/admin/import', {
                 method: 'POST',
                 headers: { 'X-Admin-Password': password },
-                body: formData,
             });
             const data = await res.json();
             if (res.ok) {
-                setUploadMsg(data.message ?? 'Upload successful!');
+                setImportMsg(data.message ?? 'Import successful!');
                 loadStatus();
             } else {
-                setUploadError(data.title ?? data.message ?? 'Upload failed.');
+                setImportError(data.title ?? data.message ?? 'Import failed.');
             }
         } catch (err) {
-            setUploadError('Upload error: ' + String(err));
+            setImportError('Import error: ' + String(err));
         } finally {
-            setUploading(false);
+            setImporting(false);
         }
     };
 
@@ -221,24 +215,24 @@ export function Admin() {
             </div>
 
             <div style={styles.section}>
-                <h3 style={styles.sectionTitle}>Upload Data</h3>
+                <h3 style={styles.sectionTitle}>WH40K Data (Wahapedia)</h3>
                 <p style={styles.hint}>
-                    Upload a <strong>Data.rar</strong> file containing the CSV data files.
-                    This will replace all existing data in the database.
+                    Fetch and import data from{' '}
+                    <a href="https://wahapedia.ru/wh40k10ed/Export%20Data%20Specs.xlsx" target="_blank" rel="noopener noreferrer" style={styles.link}>
+                        wahapedia.ru
+                    </a>
+                    . The server will download the Export Data Specs and all linked CSV files,
+                    then replace all existing data in the database.
                 </p>
-                <form onSubmit={handleUpload} style={styles.form}>
-                    <input
-                        type="file"
-                        accept=".rar"
-                        onChange={e => setFile(e.target.files?.[0] ?? null)}
-                        style={styles.fileInput}
-                    />
-                    <button type="submit" disabled={uploading || !file} style={styles.btn}>
-                        {uploading ? 'Uploading...' : 'Upload & Import'}
-                    </button>
-                </form>
-                {uploadMsg && <p style={styles.success}>{uploadMsg}</p>}
-                {uploadError && <p style={styles.error}>{uploadError}</p>}
+                <button
+                    style={styles.btn}
+                    onClick={handleImport}
+                    disabled={importing}
+                >
+                    {importing ? 'Importing...' : '⬇ Получить данные Wahapedia'}
+                </button>
+                {importMsg && <p style={styles.success}>{importMsg}</p>}
+                {importError && <p style={styles.error}>{importError}</p>}
             </div>
 
             <div style={styles.section}>

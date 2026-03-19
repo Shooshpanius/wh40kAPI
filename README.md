@@ -18,7 +18,7 @@ Full-stack **API для Warhammer 40,000 10-го издания** на базе 
   - WH40K API: `/scalar/wh40k`
   - BSData 40K: `/scalar/bsdata`
   - BSData Kill Team: `/scalar/ktbsdata`
-- **Панель администратора** на React (`/admin`) — загрузка официального `Data.rar` и импорт данных сообщества с GitHub
+- **Панель администратора** на React (`/admin`) — импорт данных Wahapedia и данных сообщества с GitHub
 - **Три базы данных MariaDB** — схема создаётся автоматически при первом запуске через EF Core `EnsureCreated`
 - **Готов к Docker** — многоэтапные сборки для бэкенда (.NET) и фронтенда (Nginx)
 
@@ -48,7 +48,7 @@ Full-stack **API для Warhammer 40,000 10-го издания** на базе 
 
 | API | Источник | Способ импорта |
 |-----|----------|----------------|
-| WH40K 10-е издание | Официальный архив `Data.rar` | Загрузка через панель администратора |
+| WH40K 10-е издание | [Export Data Specs](https://wahapedia.ru/wh40k10ed/Export%20Data%20Specs.xlsx) (wahapedia.ru) | Запуск через панель администратора |
 | BSData 40K | [BSData/wh40k-10e](https://github.com/BSData/wh40k-10e) на GitHub | Запуск через панель администратора |
 | BSData Kill Team | [BSData/wh40k-killteam](https://github.com/BSData/wh40k-killteam) на GitHub | Запуск через панель администратора |
 
@@ -62,8 +62,7 @@ Full-stack **API для Warhammer 40,000 10-го издания** на базе 
 | Фронтенд | React 19 + TypeScript 5 + Vite 7 |
 | Маршрутизация | React Router DOM 7 |
 | База данных | MariaDB (3 отдельные БД) |
-| Работа с архивами | SharpCompress (`.rar` / `.zip`) |
-| Разбор CSV | CsvHelper |
+| Разбор Excel / CSV | System.IO.Compression + CsvHelper |
 | Контейнеризация | Docker (многоэтапные сборки для бэкенда и фронтенда) |
 
 ## Начало работы
@@ -206,7 +205,7 @@ echo -n "ваш_пароль" | sha256sum | awk '{print $1}'
 | `GET /api/wh40k/enhancements/{id}` | Одно улучшение |
 | `GET /api/wh40k/source` | Книги-источники |
 | `GET /api/wh40k/source/{id}` | Одна книга-источник |
-| `POST /api/wh40k/admin/upload` | Загрузить `Data.rar` *(требует заголовок `X-Admin-Password`, макс. 50 МБ)* |
+| `POST /api/wh40k/admin/import` | Скачать данные с wahapedia.ru и импортировать *(требует заголовок `X-Admin-Password`)* |
 | `POST /api/wh40k/admin/verify` | Проверить пароль администратора *(требует заголовок `X-Admin-Password`)* |
 | `GET /api/wh40k/admin/status` | Статус базы данных *(требует заголовок `X-Admin-Password`)* |
 

@@ -77,6 +77,11 @@ builder.Services.AddHttpClient("github", client =>
     client.DefaultRequestHeaders.UserAgent.ParseAdd("wh40kAPI/1.0");
     client.Timeout = TimeSpan.FromMinutes(10);
 });
+builder.Services.AddHttpClient("wahapedia", client =>
+{
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("wh40kAPI/1.0");
+    client.Timeout = TimeSpan.FromMinutes(10);
+});
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
