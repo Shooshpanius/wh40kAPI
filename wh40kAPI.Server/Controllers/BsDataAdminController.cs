@@ -11,7 +11,7 @@ namespace wh40kAPI.Server.Controllers;
 [ApiExplorerSettings(IgnoreApi = true)]
 [Route("api/bsdata/admin")]
 [EnableRateLimiting("admin")]
-public class BsDataAdminController(BsDataDbContext db, BsDataImportService importService) : ControllerBase
+public class BsDataAdminController(BsDataDbContext db, BsDataImportService importService, ILogger<BsDataAdminController> logger) : ControllerBase
 {
     /// <summary>
     /// Trigger import of WH40K BSData from the BSData/wh40k-10e GitHub repository.
@@ -21,8 +21,16 @@ public class BsDataAdminController(BsDataDbContext db, BsDataImportService impor
     [AdminAuth]
     public async Task<IActionResult> Import()
     {
-        int units = await importService.ImportAsync();
-        return Ok(new { message = $"BSData imported successfully. Units: {units}" });
+        try
+        {
+            int units = await importService.ImportAsync();
+            return Ok(new { message = $"BSData imported successfully. Units: {units}" });
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "BSData import failed");
+            return StatusCode(500, new { message = ex.Message });
+        }
     }
 
     /// <summary>
