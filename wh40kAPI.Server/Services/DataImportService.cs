@@ -1,15 +1,28 @@
 using System.Globalization;
+using System.IO.Compression;
+using System.Xml.Linq;
 using CsvHelper;
 using CsvHelper.Configuration;
-using SharpCompress.Archives;
-using SharpCompress.Common;
 using wh40kAPI.Server.Data;
 using wh40kAPI.Server.Models;
 
 namespace wh40kAPI.Server.Services;
 
-public class DataImportService(AppDbContext db)
+public class DataImportService(AppDbContext db, IHttpClientFactory httpClientFactory, ILogger<DataImportService> logger)
 {
+    private const string ExcelSpecUrl = "https://wahapedia.ru/wh40k10ed/Export%20Data%20Specs.xlsx";
+
+    private static readonly string[] KnownCsvFiles =
+    [
+        "Factions.csv", "Abilities.csv", "Source.csv", "Datasheets.csv",
+        "Datasheets_abilities.csv", "Datasheets_detachment_abilities.csv",
+        "Datasheets_enhancements.csv", "Datasheets_keywords.csv",
+        "Datasheets_leader.csv", "Datasheets_models.csv", "Datasheets_models_cost.csv",
+        "Datasheets_options.csv", "Datasheets_stratagems.csv", "Datasheets_unit_composition.csv",
+        "Datasheets_wargear.csv", "Detachment_abilities.csv", "Detachments.csv",
+        "Enhancements.csv", "Stratagems.csv", "Last_update.csv",
+    ];
+
     private static readonly CsvConfiguration CsvConfig = new(CultureInfo.InvariantCulture)
     {
         Delimiter = "|",
@@ -20,18 +33,64 @@ public class DataImportService(AppDbContext db)
         PrepareHeaderForMatch = args => args.Header.ToLowerInvariant().TrimStart('\uFEFF'),
     };
 
-    public async Task ImportFromRarAsync(Stream rarStream)
+    /// <summary>
+    /// Downloads the wahapedia Export Data Specs Excel file, extracts the CSV download URLs
+    /// from its hyperlinks, downloads each CSV file, and imports the data into the database.
+    /// </summary>
+    public async Task ImportFromWahapediaAsync()
     {
+        var client = httpClientFactory.CreateClient("wahapedia");
+
+        // Step 1: Download the Excel spec file
+        logger.LogInformation("Downloading Export Data Specs from {Url}", ExcelSpecUrl);
+        HttpResponseMessage excelResponse;
+        try
+        {
+            excelResponse = await client.GetAsync(ExcelSpecUrl);
+            excelResponse.EnsureSuccessStatusCode();
+        }
+        catch (Exception ex)
+        {
+            throw new InvalidOperationException(
+                $"Failed to download Export Data Specs from {ExcelSpecUrl}: {ex.Message}", ex);
+        }
+
+        // Step 2: Parse the Excel file for CSV download URLs
+        using var excelStream = await excelResponse.Content.ReadAsStreamAsync();
+        excelResponse.Dispose();
+        var csvUrls = ParseExcelForCsvUrls(excelStream);
+        logger.LogInformation("Found {Count} CSV URLs in the Excel spec", csvUrls.Count);
+
+        // Merge parsed URLs with the known CSV file list, falling back to a constructed URL
+        // for any file not explicitly linked in the Excel.
+        const string wahapediaBase = "https://wahapedia.ru/wh40k10ed/";
+        var fileUrls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var fileName in KnownCsvFiles)
+        {
+            fileUrls[fileName] = csvUrls.TryGetValue(fileName, out var url)
+                ? url
+                : wahapediaBase + fileName;
+        }
+
+        // Step 3: Download each CSV and import
         var tempDir = Path.Combine(Path.GetTempPath(), Path.GetRandomFileName());
         Directory.CreateDirectory(tempDir);
         try
         {
-            using (var archive = ArchiveFactory.Open(rarStream))
+            foreach (var (fileName, url) in fileUrls)
             {
-                foreach (var entry in archive.Entries.Where(e => !e.IsDirectory))
+                logger.LogInformation("Downloading {File} from {Url}", fileName, url);
+                try
                 {
-                    var destPath = Path.Combine(tempDir, Path.GetFileName(entry.Key ?? ""));
-                    entry.WriteToFile(destPath, new ExtractionOptions { Overwrite = true });
+                    var csvResponse = await client.GetAsync(url);
+                    csvResponse.EnsureSuccessStatusCode();
+                    var csvBytes = await csvResponse.Content.ReadAsByteArrayAsync();
+                    await File.WriteAllBytesAsync(Path.Combine(tempDir, fileName), csvBytes);
+                }
+                catch (Exception ex)
+                {
+                    throw new InvalidOperationException(
+                        $"Failed to download CSV file '{fileName}' from {url}: {ex.Message}", ex);
                 }
             }
 
@@ -41,6 +100,64 @@ public class DataImportService(AppDbContext db)
         {
             Directory.Delete(tempDir, true);
         }
+    }
+
+    /// <summary>
+    /// Parses an XLSX stream (which is a ZIP archive) and extracts all external hyperlinks
+    /// that point to CSV files.  Returns a dictionary of filename → URL.
+    /// </summary>
+    private static Dictionary<string, string> ParseExcelForCsvUrls(Stream excelStream)
+    {
+        var urls = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        XNamespace pkgRels = "http://schemas.openxmlformats.org/package/2006/relationships";
+
+        using var zip = new ZipArchive(excelStream, ZipArchiveMode.Read, leaveOpen: true);
+
+        // Build a map of relationship ID → worksheet target path from the workbook rels file.
+        var sheetTargets = new List<string>();
+        var wbRelsEntry = zip.GetEntry("xl/_rels/workbook.xml.rels");
+        if (wbRelsEntry != null)
+        {
+            using var relsStream = wbRelsEntry.Open();
+            var relsDoc = XDocument.Load(relsStream);
+            foreach (var rel in relsDoc.Descendants(pkgRels + "Relationship"))
+            {
+                var type = rel.Attribute("Type")?.Value ?? "";
+                var target = rel.Attribute("Target")?.Value ?? "";
+                if (type.EndsWith("/worksheet") && !string.IsNullOrEmpty(target))
+                    sheetTargets.Add(target); // e.g., "worksheets/sheet1.xml"
+            }
+        }
+
+        // For each worksheet, read its relationships file and collect CSV hyperlinks.
+        foreach (var sheetTarget in sheetTargets)
+        {
+            var sheetFileName = Path.GetFileName(sheetTarget); // "sheet1.xml"
+            var sheetRelsPath = $"xl/worksheets/_rels/{sheetFileName}.rels";
+            var sheetRelsEntry = zip.GetEntry(sheetRelsPath);
+            if (sheetRelsEntry == null) continue;
+
+            using var sheetRelsStream = sheetRelsEntry.Open();
+            var sheetRelsDoc = XDocument.Load(sheetRelsStream);
+
+            foreach (var rel in sheetRelsDoc.Descendants(pkgRels + "Relationship"))
+            {
+                var type = rel.Attribute("Type")?.Value ?? "";
+                var targetMode = rel.Attribute("TargetMode")?.Value ?? "";
+                var target = rel.Attribute("Target")?.Value ?? "";
+
+                if (type.EndsWith("/hyperlink")
+                    && targetMode == "External"
+                    && Uri.TryCreate(target, UriKind.Absolute, out var uri)
+                    && uri.AbsolutePath.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                {
+                    var fileName = Path.GetFileName(uri.AbsolutePath);
+                    urls[fileName] = target;
+                }
+            }
+        }
+
+        return urls;
     }
 
     private async Task ImportAllCsvFiles(string dir)

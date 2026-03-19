@@ -15,22 +15,15 @@ namespace wh40kAPI.Server.Controllers;
 public class AdminController(AppDbContext db, DataImportService importService) : ControllerBase
 {
     /// <summary>
-    /// Upload Data.rar to import all WH40K data into the database.
+    /// Download the wahapedia Export Data Specs Excel file, follow its CSV links,
+    /// and import all WH40K data into the database.
     /// Requires X-Admin-Password header.
     /// </summary>
-    [HttpPost("upload")]
+    [HttpPost("import")]
     [AdminAuth]
-    [RequestSizeLimit(50_000_000)]
-    public async Task<IActionResult> UploadData(IFormFile file)
+    public async Task<IActionResult> ImportData()
     {
-        if (file is null || file.Length == 0)
-            return BadRequest("No file provided.");
-
-        if (!file.FileName.EndsWith(".rar", StringComparison.OrdinalIgnoreCase))
-            return BadRequest("Only .rar files are accepted.");
-
-        using var stream = file.OpenReadStream();
-        await importService.ImportFromRarAsync(stream);
+        await importService.ImportFromWahapediaAsync();
         return Ok(new { message = "Data imported successfully." });
     }
 
