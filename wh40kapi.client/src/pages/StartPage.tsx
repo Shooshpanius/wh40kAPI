@@ -1,13 +1,34 @@
 import { useEffect, useState } from 'react';
 
+interface ApiStatus {
+    wh40k: string | null;
+    bsData: string | null;
+    ktBsData: string | null;
+}
+
+function formatImportDate(value: string | null | undefined): string {
+    if (!value) return 'нет данных';
+    const d = new Date(value);
+    if (isNaN(d.getTime())) return value;
+    return d.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+}
+
 export function StartPage() {
     const [killTeamAvailable, setKillTeamAvailable] = useState(false);
+    const [apiStatus, setApiStatus] = useState<ApiStatus | null>(null);
 
     useEffect(() => {
-        fetch('/api/ktbsdata/catalogues')
-            .then(r => r.ok ? r.json() : Promise.reject(new Error(`${r.status} ${r.statusText}`)))
-            .then((data: unknown) => setKillTeamAvailable(Array.isArray(data) && data.length > 0))
-            .catch((e: unknown) => { console.error('Failed to fetch Kill Team catalogues:', e); setKillTeamAvailable(false); });
+        Promise.allSettled([
+            fetch('/api/ktbsdata/catalogues')
+                .then(r => r.ok ? r.json() : Promise.reject(new Error(`${r.status} ${r.statusText}`)))
+                .then((data: unknown) => setKillTeamAvailable(Array.isArray(data) && data.length > 0))
+                .catch((e: unknown) => { console.error('Failed to fetch Kill Team catalogues:', e); setKillTeamAvailable(false); }),
+
+            fetch('/api/status')
+                .then(r => r.ok ? r.json() : Promise.reject(new Error(`${r.status} ${r.statusText}`)))
+                .then((data: ApiStatus) => setApiStatus(data))
+                .catch((e: unknown) => { console.error('Failed to fetch API status:', e); }),
+        ]);
     }, []);
 
     return (
@@ -20,18 +41,21 @@ export function StartPage() {
                     desc="Фракции, юниты, отряды, стратагемы и улучшения."
                     href="/wahapedia"
                     available
+                    importDate={formatImportDate(apiStatus?.wh40k)}
                 />
                 <ApiCard
                     title="API BSData 40k"
                     desc="Данные Warhammer 40,000 из репозитория BSData."
                     href="/bsdata-40k"
                     available
+                    importDate={formatImportDate(apiStatus?.bsData)}
                 />
                 <ApiCard
                     title="API BSData Kill Team"
                     desc="Данные Kill Team из репозитория BSData."
                     href="/bsdata-killteam"
                     available={killTeamAvailable}
+                    importDate={formatImportDate(apiStatus?.ktBsData)}
                 />
             </div>
 
@@ -47,7 +71,7 @@ export function StartPage() {
     );
 }
 
-function ApiCard({ title, desc, href, available }: { title: string; desc: string; href: string; available: boolean }) {
+function ApiCard({ title, desc, href, available, importDate }: { title: string; desc: string; href: string; available: boolean; importDate?: string }) {
     const content = (
         <>
             <div style={styles.badge}>
@@ -62,6 +86,11 @@ function ApiCard({ title, desc, href, available }: { title: string; desc: string
             {title.includes('Wahapedia') && (
                 <div style={{ marginTop: 8, color: 'rgb(232, 193, 112)', fontSize: '0.9rem' }}>
                     Данные предоставлены сервисом <a href="https://wahapedia.ru/" target="_blank" rel="noopener noreferrer" style={{ color: 'rgb(232, 193, 112)', textDecoration: 'none', fontWeight: 700 }}>Wahapedia</a>
+                </div>
+            )}
+            {importDate && (
+                <div style={{ marginTop: 8, color: '#999', fontSize: '0.8rem' }}>
+                    Импортировано: {importDate}
                 </div>
             )}
         </>
