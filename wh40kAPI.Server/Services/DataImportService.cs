@@ -56,8 +56,9 @@ public class DataImportService(AppDbContext db, IHttpClientFactory httpClientFac
         }
 
         // Step 2: Parse the Excel file for CSV download URLs
-        using var excelStream = await excelResponse.Content.ReadAsStreamAsync();
+        var excelBytes = await excelResponse.Content.ReadAsByteArrayAsync();
         excelResponse.Dispose();
+        using var excelStream = new MemoryStream(excelBytes);
         var csvUrls = ParseExcelForCsvUrls(excelStream);
         logger.LogInformation("Found {Count} CSV URLs in the Excel spec", csvUrls.Count);
 
