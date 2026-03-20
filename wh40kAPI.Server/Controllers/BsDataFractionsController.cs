@@ -376,7 +376,29 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             }
         }
 
+        // Enforce depth-rule: Categories and InfoLinks are meaningful only for root nodes
+        // (depth=0).  Root units that end up as children via entry-link resolution were
+        // loaded with those collections populated, so clear them here.
+        var visitedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var root in roots)
+            ClearChildFields(root.Children, visitedIds);
+
         return roots;
+    }
+
+    /// <summary>
+    /// Recursively clears <c>Categories</c> and <c>InfoLinks</c> on all child nodes
+    /// (depth ≥ 1).  A visited-id guard prevents infinite loops in cycle-containing graphs.
+    /// </summary>
+    private static void ClearChildFields(ICollection<BsDataUnitNodeLite> children, HashSet<string> visited)
+    {
+        foreach (var child in children)
+        {
+            child.Categories = [];
+            child.InfoLinks = [];
+            if (visited.Add(child.Id))
+                ClearChildFields(child.Children, visited);
+        }
     }
 
     /// <summary>
