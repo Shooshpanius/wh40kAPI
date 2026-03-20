@@ -113,4 +113,38 @@ public class BsDataUnitsController(BsDataDbContext db) : ControllerBase
             .OrderBy(t => t.MinModels)
             .ToListAsync();
     }
+
+    /// <summary>
+    /// Returns a full <see cref="BsDataUnitNode"/> for the unit with <paramref name="id"/>,
+    /// including its profiles (unit stats and weapon stats) and direct children (upgrade-nodes
+    /// such as weapons) with their profiles and infoLinks.
+    /// Use this endpoint to load a complete datasheet for a single unit on demand,
+    /// instead of fetching the entire faction tree via <c>/fractions/{id}/unitsTree</c>.
+    /// </summary>
+    [HttpGet("{id}/fullNode")]
+    public async Task<ActionResult<BsDataUnitNode>> GetFullNode(string id)
+    {
+        var unit = await db.Units.AsNoTracking()
+            .Include(u => u.Categories)
+            .Include(u => u.InfoLinks)
+            .Include(u => u.EntryLinks)
+            .Include(u => u.CostTiers)
+            .Include(u => u.ModifierGroups)
+            .Include(u => u.Profiles)
+            .FirstOrDefaultAsync(u => u.Id == id);
+        if (unit is null) return NotFound();
+
+        var node = BsDataUnitNode.FromUnit(unit);
+
+        var children = await db.Units.AsNoTracking()
+            .Include(u => u.InfoLinks)
+            .Include(u => u.Profiles)
+            .Where(u => u.ParentId == id)
+            .OrderBy(u => u.Name)
+            .ToListAsync();
+        foreach (var child in children)
+            node.Children.Add(BsDataUnitNode.FromUnit(child));
+
+        return Ok(node);
+    }
 }

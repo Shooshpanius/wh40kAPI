@@ -107,14 +107,48 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             return NotFound();
 
         var catalogueIds = await CollectCatalogueIdsAsync(id);
+        return Ok(await BuildUnitsTreeAsync(catalogueIds, includeProfiles: true));
+    }
 
-        var units = await db.Units.AsNoTracking()
+    /// <summary>
+    /// Lightweight version of <c>/unitsTree</c> — returns the same hierarchy but
+    /// <b>without</b> the <c>profiles</c> field on any node.
+    /// Use this endpoint to quickly display a faction's unit list (names, costs,
+    /// categories, detachment conditions) without downloading stat blocks.
+    /// Fetch <c>/units/{id}/fullNode</c> on demand when the user selects a unit.
+    /// </summary>
+    [HttpGet("{id}/unitsList")]
+    public async Task<ActionResult<IEnumerable<BsDataUnitNode>>> GetUnitsTreeLite(string id)
+    {
+        if (!await db.Catalogues.AnyAsync(c => c.Id == id && !c.Library))
+            return NotFound();
+
+        var catalogueIds = await CollectCatalogueIdsAsync(id);
+        return Ok(await BuildUnitsTreeAsync(catalogueIds, includeProfiles: false));
+    }
+
+    /// <summary>
+    /// Builds the units hierarchy for the given set of catalogue IDs.
+    /// When <paramref name="includeProfiles"/> is <see langword="false"/> the profiles
+    /// are not loaded from the database and every node's <c>Profiles</c> collection
+    /// will be empty — suitable for lightweight list endpoints.
+    /// </summary>
+    /// <param name="catalogueIds">The set of catalogue IDs (faction catalogue plus all transitively linked catalogues) whose units are included in the tree.</param>
+    /// <param name="includeProfiles">When <see langword="true"/> unit and weapon profiles are eagerly loaded; pass <see langword="false"/> for the lightweight <c>/unitsList</c> endpoint.</param>
+    private async Task<List<BsDataUnitNode>> BuildUnitsTreeAsync(
+        HashSet<string> catalogueIds, bool includeProfiles)
+    {
+        IQueryable<BsDataUnit> query = db.Units.AsNoTracking()
             .Include(u => u.Categories)
             .Include(u => u.InfoLinks)
             .Include(u => u.EntryLinks)
             .Include(u => u.CostTiers)
-            .Include(u => u.ModifierGroups)
-            .Include(u => u.Profiles)
+            .Include(u => u.ModifierGroups);
+
+        if (includeProfiles)
+            query = query.Include(u => u.Profiles);
+
+        var units = await query
             .Where(u => catalogueIds.Contains(u.CatalogueId))
             .OrderBy(u => u.Name)
             .ToListAsync();
@@ -214,7 +248,7 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             }
         }
 
-        return Ok(roots);
+        return roots;
     }
 
     /// <summary>
