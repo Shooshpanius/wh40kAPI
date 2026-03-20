@@ -475,7 +475,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .FirstOrDefault();
         if (decimal.TryParse(pointsValue, System.Globalization.NumberStyles.Any,
                 System.Globalization.CultureInfo.InvariantCulture, out var parsedPoints))
-            points = parsedPoints;
+            points = Math.Round(parsedPoints, 2);
 
         // Extract min/max roster quantities from top-level constraints
         int? minInRoster = null;
@@ -726,6 +726,7 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 if (!decimal.TryParse(mod.Attribute("value")?.Value,
                         System.Globalization.NumberStyles.Any,
                         System.Globalization.CultureInfo.InvariantCulture, out var newCost)) continue;
+                newCost = Math.Round(newCost, 2);
 
                 var cond = mod.Element(Ns + "conditions")
                     ?.Elements(Ns + "condition")

@@ -12,8 +12,8 @@ public class BsDataUnitNodeLite
     public string CatalogueId { get; set; } = string.Empty;
     public string Name { get; set; } = string.Empty;
     public string? EntryType { get; set; }
-    /// <summary>Points cost — stored as <see langword="double"/> to avoid 28-digit decimal serialization.</summary>
-    public double? Points { get; set; }
+    /// <summary>Points cost — stored as <see langword="decimal"/> for exact representation.</summary>
+    public decimal? Points { get; set; }
     public bool Hidden { get; set; }
     /// <summary>Slim category projections — only <c>name</c> and <c>primary</c>.</summary>
     public ICollection<BsDataUnitCategorySlim> Categories { get; set; } = [];
@@ -24,7 +24,7 @@ public class BsDataUnitNodeLite
         CatalogueId = unit.CatalogueId,
         Name = unit.Name,
         EntryType = unit.EntryType,
-        Points = unit.Points is { } p ? (double)p : null,
+        Points = unit.Points is { } p ? Math.Round(p, 2) : null,  // Round defensively to handle legacy DB values imported before this fix
         Hidden = unit.Hidden,
         Categories = unit.Categories.Select(c => new BsDataUnitCategorySlim { Name = c.Name, Primary = c.Primary }).ToList(),
     };
