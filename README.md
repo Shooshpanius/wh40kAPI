@@ -222,7 +222,7 @@ echo -n "ваш_пароль" | sha256sum | awk '{print $1}'
 | `GET /api/bsdata/fractions/{id}` | Одна фракция |
 | `GET /api/bsdata/fractions/{id}/units` | Юниты фракции (рекурсивно через catalogueLinks) |
 | `GET /api/bsdata/fractions/{id}/unitsWithCosts` | Юниты фракции со стоимостями |
-| `GET /api/bsdata/fractions/{id}/unitsTree` | Дерево юнитов фракции |
+| `GET /api/bsdata/fractions/{id}/unitsTree` | Дерево юнитов фракции со всеми характеристиками (профили M/T/Sv/W/Ld/OC, оружие Range/A/BS&#124;WS/S/AP/D) и ключевыми словами — достаточно **одного запроса** для отображения каталога фракции |
 | `GET /api/bsdata/fractions/{id}/detachments` | Отряды фракции |
 | `GET /api/bsdata/units?catalogueId={id}` | Все юниты (фильтр по каталогу — необязателен) |
 | `GET /api/bsdata/units/{id}` | Один юнит |
@@ -235,6 +235,19 @@ echo -n "ваш_пароль" | sha256sum | awk '{print $1}'
 | `GET /api/bsdata/units/{id}/cost-tiers` | Ценовые уровни юнита |
 | `POST /api/bsdata/admin/import` | Импорт из BSData/wh40k-10e на GitHub *(требует заголовок `X-Admin-Password`)* |
 | `GET /api/bsdata/admin/status` | Статус базы BSData *(требует заголовок `X-Admin-Password`)* |
+
+#### Формат ответа `unitsTree`
+
+Каждый узел дерева содержит полный набор данных для отображения карточки юнита:
+
+| Поле | Описание |
+|------|----------|
+| `profiles` | Характеристики юнита (`typeName="Unit"`: M/T/Sv/W/Ld/OC) и оружия (`typeName` содержит `"Weapons"`: Range/A/BS&#124;WS/S/AP/D) |
+| `categories` | Все ключевые слова: боевая роль (`primary=true`) и фракционные/специальные теги (`primary=false`) |
+| `infoLinks` | Имена способностей и правил юнита (тип `"rule"`) |
+| `children` | Дочерние upgrade-узлы (оружие) — каждый со своими `profiles` и `infoLinks` |
+
+Один вызов `GET /api/bsdata/fractions/{id}/unitsTree` заменяет сотни отдельных запросов к `/units/{id}/profiles` и `/units/{id}/categories`, необходимых при постраничном отображении каталога фракции.
 
 ### BSData Kill Team API (`/api/ktbsdata/`)
 
