@@ -111,20 +111,23 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     }
 
     /// <summary>
-    /// Lightweight version of <c>/unitsTree</c> — returns the same hierarchy but
-    /// <b>without</b> the <c>profiles</c> field on any node.
-    /// Use this endpoint to quickly display a faction's unit list (names, costs,
-    /// categories, detachment conditions) without downloading stat blocks.
+    /// Lightweight version of <c>/unitsTree</c> optimised for displaying a faction's
+    /// unit catalogue.  Compared to <c>/unitsTree</c> this endpoint:
+    /// <list type="bullet">
+    ///   <item>Omits <c>profiles</c> on all nodes.</item>
+    ///   <item>Returns only <c>type</c> and <c>name</c> inside <c>infoLinks</c> for root nodes.</item>
+    ///   <item>Omits <c>infoLinks</c> and <c>categories</c> entirely from child nodes (depth≥1).</item>
+    /// </list>
     /// Fetch <c>/units/{id}/fullNode</c> on demand when the user selects a unit.
     /// </summary>
     [HttpGet("{id}/unitsList")]
-    public async Task<ActionResult<IEnumerable<BsDataUnitNode>>> GetUnitsTreeLite(string id)
+    public async Task<ActionResult<IEnumerable<BsDataUnitNodeLite>>> GetUnitsTreeLite(string id)
     {
         if (!await db.Catalogues.AnyAsync(c => c.Id == id && !c.Library))
             return NotFound();
 
         var catalogueIds = await CollectCatalogueIdsAsync(id);
-        return Ok(await BuildUnitsTreeAsync(catalogueIds, includeProfiles: false));
+        return Ok(await BuildUnitsTreeLiteAsync(catalogueIds));
     }
 
     /// <summary>
@@ -243,6 +246,125 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
                 // hidden=false based on the underlying selectionEntry definition.
                 if (link.DetachmentModifiers != null && link.DetachmentConditions != null)
                     node.Children.Add(BsDataUnitNode.WithDetachmentDependency(target, link.DetachmentModifiers, link.DetachmentConditions));
+                else
+                    node.Children.Add(target);
+            }
+        }
+
+        return roots;
+    }
+
+    /// <summary>
+    /// Builds the lightweight units hierarchy used by <c>/unitsList</c>.
+    /// <para>
+    /// Differences from <see cref="BuildUnitsTreeAsync"/>:
+    /// <list type="bullet">
+    ///   <item>Root nodes (depth=0): <c>InfoLinks</c> are loaded but projected to
+    ///         <see cref="BsDataInfoLinkSlim"/> — only <c>type</c> and <c>name</c> are
+    ///         included; <c>id</c> and <c>targetId</c> are dropped.</item>
+    ///   <item>Child nodes (depth≥1): <c>InfoLinks</c> and <c>Categories</c> are
+    ///         <b>not</b> loaded from the database, reducing both DB JOIN cost and
+    ///         payload size.</item>
+    ///   <item><c>Profiles</c> and <c>EntryLinks</c> are never included in the
+    ///         serialised response.</item>
+    /// </list>
+    /// </para>
+    /// </summary>
+    private async Task<List<BsDataUnitNodeLite>> BuildUnitsTreeLiteAsync(HashSet<string> catalogueIds)
+    {
+        // Roots: include InfoLinks and Categories — both are needed at depth=0.
+        var rootUnits = await db.Units.AsNoTracking()
+            .Where(u => catalogueIds.Contains(u.CatalogueId) && u.ParentId == null)
+            .Include(u => u.Categories)
+            .Include(u => u.InfoLinks)
+            .Include(u => u.EntryLinks)
+            .Include(u => u.CostTiers)
+            .Include(u => u.ModifierGroups)
+            .OrderBy(u => u.Name)
+            .ToListAsync();
+
+        // Children: InfoLinks and Categories are not loaded to save DB JOINs and bandwidth.
+        var childUnits = await db.Units.AsNoTracking()
+            .Where(u => catalogueIds.Contains(u.CatalogueId) && u.ParentId != null)
+            .Include(u => u.EntryLinks)
+            .Include(u => u.CostTiers)
+            .Include(u => u.ModifierGroups)
+            .OrderBy(u => u.Name)
+            .ToListAsync();
+
+        var allUnits = rootUnits.Concat(childUnits).ToList();
+
+        // Convert every unit to a lite node and index by id for O(1) child lookup.
+        var nodeById = allUnits.ToDictionary(u => u.Id, BsDataUnitNodeLite.FromUnit);
+
+        // Keep a separate index of EntryLinks for O(1) lookup during entry-link resolution.
+        var entryLinksById = allUnits.ToDictionary(u => u.Id, u => u.EntryLinks);
+
+        // Collect all entry-link target IDs so they are not promoted to root nodes.
+        var entryLinkTargets = new HashSet<string>(
+            allUnits.SelectMany(u => u.EntryLinks.Select(l => l.TargetId)),
+            StringComparer.OrdinalIgnoreCase);
+
+        // Load catalogue-level entryLinks with detachment conditions.
+        var catalogueLevelEntryLinksWithConditions = await db.CatalogueLevelEntryLinks
+            .AsNoTracking()
+            .Where(l => catalogueIds.Contains(l.CatalogueId)
+                     && l.DetachmentModifiers != null
+                     && l.DetachmentConditions != null)
+            .ToListAsync();
+        var catalogueLevelDetachmentByTarget = catalogueLevelEntryLinksWithConditions
+            .GroupBy(l => l.TargetId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(
+                g => g.Key,
+                g => g.First(),
+                StringComparer.OrdinalIgnoreCase);
+
+        var roots = new List<BsDataUnitNodeLite>();
+        foreach (var node in nodeById.Values)
+        {
+            if (node.ParentId is not null && nodeById.TryGetValue(node.ParentId, out var parent))
+                parent.Children.Add(node);
+            else if (!entryLinkTargets.Contains(node.Id))
+            {
+                if (catalogueLevelDetachmentByTarget.TryGetValue(node.Id, out var rootLink)
+                    && rootLink.DetachmentModifiers is not null
+                    && rootLink.DetachmentConditions is not null)
+                    roots.Add(BsDataUnitNodeLite.WithDetachmentDependency(node, rootLink.DetachmentModifiers, rootLink.DetachmentConditions));
+                else
+                    roots.Add(node);
+            }
+        }
+
+        // Populate RequiredUpgrades after the parent-child hierarchy is built.
+        foreach (var node in nodeById.Values)
+        {
+            var requiredUpgrades = node.Children
+                .Where(c => c.EntryType == "upgrade" && c.MinInRoster > 0)
+                .Select(c => new BsDataRequiredUpgrade
+                {
+                    Id = c.Id,
+                    Name = c.Name,
+                    MinInRoster = c.MinInRoster,
+                    MaxInRoster = c.MaxInRoster,
+                    RequiredDetachmentId = ExtractRequiredDetachmentId(c.ModifierGroups),
+                })
+                .Where(r => r.RequiredDetachmentId is not null)
+                .ToList();
+
+            if (requiredUpgrades.Count > 0)
+                node.RequiredUpgrades = requiredUpgrades;
+        }
+
+        // Resolve entry links: attach each linked entry as a child of the linking node.
+        foreach (var node in nodeById.Values)
+        {
+            foreach (var link in entryLinksById[node.Id])
+            {
+                if (!nodeById.TryGetValue(link.TargetId, out var target)) continue;
+                if (target.Id == node.Id || target.Id == node.ParentId) continue;
+
+                if (link.DetachmentModifiers != null && link.DetachmentConditions != null)
+                    node.Children.Add(BsDataUnitNodeLite.WithDetachmentDependency(target, link.DetachmentModifiers, link.DetachmentConditions));
                 else
                     node.Children.Add(target);
             }

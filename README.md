@@ -223,7 +223,7 @@ echo -n "ваш_пароль" | sha256sum | awk '{print $1}'
 | `GET /api/bsdata/fractions/{id}/units` | Юниты фракции (рекурсивно через catalogueLinks) |
 | `GET /api/bsdata/fractions/{id}/unitsWithCosts` | Юниты фракции со стоимостями |
 | `GET /api/bsdata/fractions/{id}/unitsTree` | Дерево юнитов фракции со всеми характеристиками (профили M/T/Sv/W/Ld/OC, оружие Range/A/BS&#124;WS/S/AP/D) и ключевыми словами — достаточно **одного запроса** для отображения каталога фракции |
-| `GET /api/bsdata/fractions/{id}/unitsList` | Лёгкое дерево юнитов **без** поля `profiles` — быстрый список имён/стоимостей для мгновенного отображения каталога фракции |
+| `GET /api/bsdata/fractions/{id}/unitsList` | Лёгкое дерево юнитов **без** поля `profiles` и без `infoLinks`/`categories` на дочерних узлах — быстрый список имён/стоимостей для мгновенного отображения каталога фракции |
 | `GET /api/bsdata/fractions/{id}/detachments` | Отряды фракции |
 | `GET /api/bsdata/units?catalogueId={id}` | Все юниты (фильтр по каталогу — необязателен) |
 | `GET /api/bsdata/units/{id}` | Один юнит |
@@ -238,7 +238,7 @@ echo -n "ваш_пароль" | sha256sum | awk '{print $1}'
 | `POST /api/bsdata/admin/import` | Импорт из BSData/wh40k-10e на GitHub *(требует заголовок `X-Admin-Password`)* |
 | `GET /api/bsdata/admin/status` | Статус базы BSData *(требует заголовок `X-Admin-Password`)* |
 
-#### Формат ответа `unitsTree` / `unitsList` / `fullNode`
+#### Формат ответа `unitsTree` / `fullNode`
 
 Каждый узел дерева содержит полный набор данных для отображения карточки юнита:
 
@@ -248,6 +248,15 @@ echo -n "ваш_пароль" | sha256sum | awk '{print $1}'
 | `categories` | Все ключевые слова: боевая роль (`primary=true`) и фракционные/специальные теги (`primary=false`) |
 | `infoLinks` | Имена способностей и правил юнита (тип `"rule"`) |
 | `children` | Дочерние upgrade-узлы (оружие) — каждый со своими `profiles` и `infoLinks` |
+
+#### Формат ответа `unitsList`
+
+Оптимизированный формат для отображения каталога фракции. Отличается от `unitsTree`:
+
+| Узел | Поля |
+|------|------|
+| Корневые (`depth=0`) | Все поля кроме `profiles`; в `infoLinks` только `type` и `name` (без `id` и `targetId`) |
+| Дочерние (`depth≥1`) | `id`, `name`, `entryType`, `hidden`, `modifierGroups`, `minInRoster`, `maxInRoster`, `costTiers`, `children`; поля `infoLinks` и `categories` не включены |
 
 #### Рекомендуемый сценарий загрузки каталога
 
