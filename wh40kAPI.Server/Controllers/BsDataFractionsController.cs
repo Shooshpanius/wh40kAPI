@@ -297,6 +297,12 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
         // Convert every unit to a lite node and index by id for O(1) child lookup.
         var nodeById = allUnits.ToDictionary(u => u.Id, BsDataUnitNodeLite.FromUnit);
 
+        // Clear CatalogueId for child nodes — only root nodes (depth=0) need it for
+        // Allied-unit detection on the client side.  This reduces response payload size.
+        foreach (var u in childUnits)
+            if (nodeById.TryGetValue(u.Id, out var n))
+                n.CatalogueId = string.Empty;
+
         // Keep a separate index of EntryLinks for O(1) lookup during entry-link resolution.
         var entryLinksById = allUnits.ToDictionary(u => u.Id, u => u.EntryLinks);
 
@@ -600,16 +606,23 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     /// contains a condition with a non-empty <c>childId</c> — that childId is the detachment id.
     /// </para>
     /// </summary>
-    private static string? ExtractRequiredDetachmentId(ICollection<BsDataModifierGroup> modifierGroups)
+    private static string? ExtractRequiredDetachmentId(ICollection<BsDataModifierGroup> modifierGroups) =>
+        ExtractRequiredDetachmentIdCore(modifierGroups.Select(g => (g.Modifiers, g.Conditions)));
+
+    /// <inheritdoc cref="ExtractRequiredDetachmentId(ICollection{BsDataModifierGroup})"/>
+    private static string? ExtractRequiredDetachmentId(ICollection<BsDataModifierGroupSlim> modifierGroups) =>
+        ExtractRequiredDetachmentIdCore(modifierGroups.Select(g => (g.Modifiers, g.Conditions)));
+
+    private static string? ExtractRequiredDetachmentIdCore(IEnumerable<(string? Modifiers, string? Conditions)> groups)
     {
-        foreach (var mg in modifierGroups)
+        foreach (var (modifiers, conditions) in groups)
         {
-            if (mg.Modifiers is null || mg.Conditions is null)
+            if (modifiers is null || conditions is null)
                 continue;
 
             try
             {
-                using var modDoc = JsonDocument.Parse(mg.Modifiers);
+                using var modDoc = JsonDocument.Parse(modifiers);
                 var setsHiddenTrue = modDoc.RootElement.EnumerateArray().Any(m =>
                     m.TryGetProperty("field", out var f) &&
                     f.ValueKind == JsonValueKind.String &&
@@ -621,7 +634,7 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
                 if (!setsHiddenTrue)
                     continue;
 
-                using var condDoc = JsonDocument.Parse(mg.Conditions);
+                using var condDoc = JsonDocument.Parse(conditions);
                 foreach (var cond in condDoc.RootElement.EnumerateArray())
                 {
                     if (cond.TryGetProperty("childId", out var childId) &&

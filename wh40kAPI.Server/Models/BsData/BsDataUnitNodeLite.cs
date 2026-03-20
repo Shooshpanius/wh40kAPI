@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace wh40kAPI.Server.Models.BsData;
 
 /// <summary>
@@ -7,16 +9,20 @@ namespace wh40kAPI.Server.Models.BsData;
 /// <list type="bullet">
 ///   <item>Replaces <c>InfoLinks</c> with <see cref="BsDataInfoLinkSlim"/> projections
 ///         (only <c>type</c> and <c>name</c> — <c>id</c> and <c>targetId</c> are omitted).</item>
+///   <item>Replaces <c>ModifierGroups</c> with <see cref="BsDataModifierGroupSlim"/> projections
+///         (only <c>modifiers</c> and <c>conditions</c> — DB keys are omitted).</item>
 ///   <item>Omits <c>EntryLinks</c> and <c>Profiles</c> entirely (not needed by the client).</item>
 ///   <item>For child nodes (depth≥1) both <c>InfoLinks</c> and <c>Categories</c> are
-///         empty collections — those fields are not loaded from the database.</item>
+///         empty collections, <c>CatalogueId</c> is an empty string, and <c>ParentId</c>
+///         is excluded from serialization — those fields are not needed client-side.</item>
 /// </list>
 /// </summary>
 public class BsDataUnitNodeLite
 {
     public string Id { get; set; } = string.Empty;
     public string CatalogueId { get; set; } = string.Empty;
-    /// <summary>Parent entry id — null for top-level nodes.</summary>
+    /// <summary>Parent entry id — used only for server-side tree building; excluded from JSON output.</summary>
+    [JsonIgnore]
     public string? ParentId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? EntryType { get; set; }
@@ -31,7 +37,11 @@ public class BsDataUnitNodeLite
     /// </summary>
     public ICollection<BsDataInfoLinkSlim> InfoLinks { get; set; } = [];
     public ICollection<BsDataCostTier> CostTiers { get; set; } = [];
-    public ICollection<BsDataModifierGroup> ModifierGroups { get; set; } = [];
+    /// <summary>
+    /// Slim modifier-group projections — only <c>modifiers</c> and <c>conditions</c>.
+    /// DB keys (<c>id</c>, <c>unitId</c>) are omitted to reduce payload size.
+    /// </summary>
+    public ICollection<BsDataModifierGroupSlim> ModifierGroups { get; set; } = [];
     /// <summary>Direct children of this entry in the selection-entry hierarchy.</summary>
     public ICollection<BsDataUnitNodeLite> Children { get; set; } = [];
     /// <summary>
@@ -54,12 +64,12 @@ public class BsDataUnitNodeLite
         Categories = unit.Categories,
         InfoLinks = unit.InfoLinks.Select(l => new BsDataInfoLinkSlim { Type = l.Type, Name = l.Name }).ToList(),
         CostTiers = unit.CostTiers,
-        ModifierGroups = unit.ModifierGroups,
+        ModifierGroups = unit.ModifierGroups.Select(g => new BsDataModifierGroupSlim { Modifiers = g.Modifiers, Conditions = g.Conditions }).ToList(),
     };
 
     /// <summary>
     /// Creates a copy of <paramref name="source"/> with <see cref="Hidden"/> forced to
-    /// <see langword="true"/> and an extra <see cref="BsDataModifierGroup"/> that encodes
+    /// <see langword="true"/> and an extra <see cref="BsDataModifierGroupSlim"/> that encodes
     /// the detachment-unlock condition.
     /// </summary>
     public static BsDataUnitNodeLite WithDetachmentDependency(BsDataUnitNodeLite source, string modifiers, string conditions) => new()
@@ -77,7 +87,7 @@ public class BsDataUnitNodeLite
         InfoLinks = source.InfoLinks,
         CostTiers = source.CostTiers,
         Children = source.Children,
-        ModifierGroups = [.. source.ModifierGroups, new BsDataModifierGroup { UnitId = source.Id, Modifiers = modifiers, Conditions = conditions }],
+        ModifierGroups = [.. source.ModifierGroups, new BsDataModifierGroupSlim { Modifiers = modifiers, Conditions = conditions }],
         RequiredUpgrades = source.RequiredUpgrades,
     };
 }
