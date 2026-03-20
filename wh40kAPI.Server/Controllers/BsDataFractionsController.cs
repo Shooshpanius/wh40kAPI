@@ -111,14 +111,9 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     }
 
     /// <summary>
-    /// Lightweight version of <c>/unitsTree</c> optimised for displaying a faction's
-    /// unit catalogue.  Compared to <c>/unitsTree</c> this endpoint:
-    /// <list type="bullet">
-    ///   <item>Omits <c>profiles</c> on all nodes.</item>
-    ///   <item>Returns only <c>type</c> and <c>name</c> inside <c>infoLinks</c> for root nodes.</item>
-    ///   <item>Omits <c>infoLinks</c> and <c>categories</c> entirely from child nodes (depth≥1).</item>
-    /// </list>
-    /// Fetch <c>/units/{id}/fullNode</c> on demand when the user selects a unit.
+    /// Returns a flat list of all units belonging to the fraction.
+    /// Each item contains only: <c>id</c>, <c>catalogueId</c>, <c>name</c>,
+    /// <c>entryType</c>, <c>points</c>, <c>hidden</c>, and <c>categories</c>.
     /// </summary>
     [HttpGet("{id}/unitsList")]
     public async Task<ActionResult<IEnumerable<BsDataUnitNodeLite>>> GetUnitsTreeLite(string id)
@@ -127,7 +122,14 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             return NotFound();
 
         var catalogueIds = await CollectCatalogueIdsAsync(id);
-        return Ok(await BuildUnitsTreeLiteAsync(catalogueIds));
+
+        var units = await db.Units.AsNoTracking()
+            .Where(u => catalogueIds.Contains(u.CatalogueId))
+            .Include(u => u.Categories)
+            .OrderBy(u => u.Name)
+            .ToListAsync();
+
+        return Ok(units.Select(BsDataUnitNodeLite.FromUnit));
     }
 
     /// <summary>
@@ -252,153 +254,6 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
         }
 
         return roots;
-    }
-
-    /// <summary>
-    /// Builds the lightweight units hierarchy used by <c>/unitsList</c>.
-    /// <para>
-    /// Differences from <see cref="BuildUnitsTreeAsync"/>:
-    /// <list type="bullet">
-    ///   <item>Root nodes (depth=0): <c>InfoLinks</c> are loaded but projected to
-    ///         <see cref="BsDataInfoLinkSlim"/> — only <c>type</c> and <c>name</c> are
-    ///         included; <c>id</c> and <c>targetId</c> are dropped.</item>
-    ///   <item>Child nodes (depth≥1): <c>InfoLinks</c> and <c>Categories</c> are
-    ///         <b>not</b> loaded from the database, reducing both DB JOIN cost and
-    ///         payload size.</item>
-    ///   <item><c>Profiles</c> and <c>EntryLinks</c> are never included in the
-    ///         serialised response.</item>
-    /// </list>
-    /// </para>
-    /// </summary>
-    private async Task<List<BsDataUnitNodeLite>> BuildUnitsTreeLiteAsync(HashSet<string> catalogueIds)
-    {
-        // Roots: include InfoLinks and Categories — both are needed at depth=0.
-        var rootUnits = await db.Units.AsNoTracking()
-            .Where(u => catalogueIds.Contains(u.CatalogueId) && u.ParentId == null)
-            .Include(u => u.Categories)
-            .Include(u => u.InfoLinks)
-            .Include(u => u.EntryLinks)
-            .Include(u => u.CostTiers)
-            .Include(u => u.ModifierGroups)
-            .OrderBy(u => u.Name)
-            .ToListAsync();
-
-        // Children: InfoLinks and Categories are not loaded to save DB JOINs and bandwidth.
-        var childUnits = await db.Units.AsNoTracking()
-            .Where(u => catalogueIds.Contains(u.CatalogueId) && u.ParentId != null)
-            .Include(u => u.EntryLinks)
-            .Include(u => u.CostTiers)
-            .Include(u => u.ModifierGroups)
-            .OrderBy(u => u.Name)
-            .ToListAsync();
-
-        var allUnits = rootUnits.Concat(childUnits).ToList();
-
-        // Convert every unit to a lite node and index by id for O(1) child lookup.
-        var nodeById = allUnits.ToDictionary(u => u.Id, BsDataUnitNodeLite.FromUnit);
-
-        // Clear CatalogueId for child nodes — only root nodes (depth=0) need it for
-        // Allied-unit detection on the client side.  This reduces response payload size.
-        foreach (var u in childUnits)
-            if (nodeById.TryGetValue(u.Id, out var n))
-                n.CatalogueId = string.Empty;
-
-        // Keep a separate index of EntryLinks for O(1) lookup during entry-link resolution.
-        var entryLinksById = allUnits.ToDictionary(u => u.Id, u => u.EntryLinks);
-
-        // Collect all entry-link target IDs so they are not promoted to root nodes.
-        var entryLinkTargets = new HashSet<string>(
-            allUnits.SelectMany(u => u.EntryLinks.Select(l => l.TargetId)),
-            StringComparer.OrdinalIgnoreCase);
-
-        // Load catalogue-level entryLinks with detachment conditions.
-        var catalogueLevelEntryLinksWithConditions = await db.CatalogueLevelEntryLinks
-            .AsNoTracking()
-            .Where(l => catalogueIds.Contains(l.CatalogueId)
-                     && l.DetachmentModifiers != null
-                     && l.DetachmentConditions != null)
-            .ToListAsync();
-        var catalogueLevelDetachmentByTarget = catalogueLevelEntryLinksWithConditions
-            .GroupBy(l => l.TargetId, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(
-                g => g.Key,
-                g => g.First(),
-                StringComparer.OrdinalIgnoreCase);
-
-        var roots = new List<BsDataUnitNodeLite>();
-        foreach (var node in nodeById.Values)
-        {
-            if (node.ParentId is not null && nodeById.TryGetValue(node.ParentId, out var parent))
-                parent.Children.Add(node);
-            else if (!entryLinkTargets.Contains(node.Id))
-            {
-                if (catalogueLevelDetachmentByTarget.TryGetValue(node.Id, out var rootLink)
-                    && rootLink.DetachmentModifiers is not null
-                    && rootLink.DetachmentConditions is not null)
-                    roots.Add(BsDataUnitNodeLite.WithDetachmentDependency(node, rootLink.DetachmentModifiers, rootLink.DetachmentConditions));
-                else
-                    roots.Add(node);
-            }
-        }
-
-        // Populate RequiredUpgrades after the parent-child hierarchy is built.
-        foreach (var node in nodeById.Values)
-        {
-            var requiredUpgrades = node.Children
-                .Where(c => c.EntryType == "upgrade" && c.MinInRoster > 0)
-                .Select(c => new BsDataRequiredUpgrade
-                {
-                    Id = c.Id,
-                    Name = c.Name,
-                    MinInRoster = c.MinInRoster,
-                    MaxInRoster = c.MaxInRoster,
-                    RequiredDetachmentId = ExtractRequiredDetachmentId(c.ModifierGroups),
-                })
-                .Where(r => r.RequiredDetachmentId is not null)
-                .ToList();
-
-            if (requiredUpgrades.Count > 0)
-                node.RequiredUpgrades = requiredUpgrades;
-        }
-
-        // Resolve entry links: attach each linked entry as a child of the linking node.
-        foreach (var node in nodeById.Values)
-        {
-            foreach (var link in entryLinksById[node.Id])
-            {
-                if (!nodeById.TryGetValue(link.TargetId, out var target)) continue;
-                if (target.Id == node.Id || target.Id == node.ParentId) continue;
-
-                if (link.DetachmentModifiers != null && link.DetachmentConditions != null)
-                    node.Children.Add(BsDataUnitNodeLite.WithDetachmentDependency(target, link.DetachmentModifiers, link.DetachmentConditions));
-                else
-                    node.Children.Add(target);
-            }
-        }
-
-        // Enforce depth-rule: Categories and InfoLinks are meaningful only for root nodes
-        // (depth=0).  Root units that end up as children via entry-link resolution were
-        // loaded with those collections populated, so clear them here.
-        var visitedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var root in roots)
-            ClearChildFields(root.Children, visitedIds);
-
-        return roots;
-    }
-
-    /// <summary>
-    /// Recursively clears <c>Categories</c> and <c>InfoLinks</c> on all child nodes
-    /// (depth ≥ 1).  A visited-id guard prevents infinite loops in cycle-containing graphs.
-    /// </summary>
-    private static void ClearChildFields(ICollection<BsDataUnitNodeLite> children, HashSet<string> visited)
-    {
-        foreach (var child in children)
-        {
-            child.Categories = [];
-            child.InfoLinks = [];
-            if (visited.Add(child.Id))
-                ClearChildFields(child.Children, visited);
-        }
     }
 
     /// <summary>
@@ -629,10 +484,6 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     /// </para>
     /// </summary>
     private static string? ExtractRequiredDetachmentId(ICollection<BsDataModifierGroup> modifierGroups) =>
-        ExtractRequiredDetachmentIdCore(modifierGroups.Select(g => (g.Modifiers, g.Conditions)));
-
-    /// <inheritdoc cref="ExtractRequiredDetachmentId(ICollection{BsDataModifierGroup})"/>
-    private static string? ExtractRequiredDetachmentId(ICollection<BsDataModifierGroupSlim> modifierGroups) =>
         ExtractRequiredDetachmentIdCore(modifierGroups.Select(g => (g.Modifiers, g.Conditions)));
 
     private static string? ExtractRequiredDetachmentIdCore(IEnumerable<(string? Modifiers, string? Conditions)> groups)
