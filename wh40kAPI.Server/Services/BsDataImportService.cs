@@ -657,7 +657,6 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                         type = cType == "min" ? "set-min" : cType == "max" ? "set-max" : type;
                     return new
                     {
-                        id = m.Attribute("id")?.Value,
                         field,
                         type,
                         value = m.Attribute("value")?.Value,
@@ -670,7 +669,6 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                 ?.Elements(Ns + "condition")
                 .Select(c => new
                 {
-                    id = c.Attribute("id")?.Value,
                     field = c.Attribute("field")?.Value,
                     scope = c.Attribute("scope")?.Value,
                     value = c.Attribute("value")?.Value,
@@ -1036,7 +1034,6 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         {
             new
             {
-                id = mod.Attribute("id")?.Value,
                 field,
                 type,
                 value = mod.Attribute("value")?.Value,
@@ -1046,7 +1043,6 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         static IEnumerable<object> SelectConditions(IEnumerable<XElement> conditions) =>
             conditions.Select(c => (object)new
             {
-                id = c.Attribute("id")?.Value,
                 field = c.Attribute("field")?.Value,
                 scope = c.Attribute("scope")?.Value,
                 value = c.Attribute("value")?.Value,

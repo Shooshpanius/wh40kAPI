@@ -11,6 +11,11 @@ namespace wh40kAPI.Server.Models.BsData;
 ///         (only <c>type</c> and <c>name</c> — <c>id</c> and <c>targetId</c> are omitted).</item>
 ///   <item>Replaces <c>ModifierGroups</c> with <see cref="BsDataModifierGroupSlim"/> projections
 ///         (only <c>modifiers</c> and <c>conditions</c> — DB keys are omitted).</item>
+///   <item>Replaces <c>Categories</c> with <see cref="BsDataUnitCategorySlim"/> projections
+///         (only <c>name</c> and <c>primary</c> — <c>id</c> and <c>unitId</c> are omitted).</item>
+///   <item>Replaces <c>CostTiers</c> with <see cref="BsDataCostTierSlim"/> projections
+///         (only <c>minModels</c>, <c>maxModels</c>, <c>points</c> — <c>id</c> and <c>unitId</c> are omitted;
+///         <c>points</c> is <see langword="double"/> to avoid 28-digit decimal serialization).</item>
 ///   <item>Omits <c>EntryLinks</c> and <c>Profiles</c> entirely (not needed by the client).</item>
 ///   <item>For child nodes (depth≥1) both <c>InfoLinks</c> and <c>Categories</c> are
 ///         empty collections, <c>CatalogueId</c> is an empty string, and <c>ParentId</c>
@@ -26,17 +31,23 @@ public class BsDataUnitNodeLite
     public string? ParentId { get; set; }
     public string Name { get; set; } = string.Empty;
     public string? EntryType { get; set; }
-    public decimal? Points { get; set; }
+    /// <summary>Points cost — stored as <see langword="double"/> to avoid 28-digit decimal serialization.</summary>
+    public double? Points { get; set; }
     public bool Hidden { get; set; }
     public int? MinInRoster { get; set; }
     public int? MaxInRoster { get; set; }
-    public ICollection<BsDataUnitCategory> Categories { get; set; } = [];
+    /// <summary>
+    /// Slim category projections — only <c>name</c> and <c>primary</c>.
+    /// Populated only for root nodes (depth=0); empty for child nodes.
+    /// </summary>
+    public ICollection<BsDataUnitCategorySlim> Categories { get; set; } = [];
     /// <summary>
     /// Slim info-link projections — only <c>type</c> and <c>name</c>.
     /// Populated only for root nodes (depth=0); empty for child nodes.
     /// </summary>
     public ICollection<BsDataInfoLinkSlim> InfoLinks { get; set; } = [];
-    public ICollection<BsDataCostTier> CostTiers { get; set; } = [];
+    /// <summary>Slim cost-tier projections — only <c>minModels</c>, <c>maxModels</c>, and <c>points</c>.</summary>
+    public ICollection<BsDataCostTierSlim> CostTiers { get; set; } = [];
     /// <summary>
     /// Slim modifier-group projections — only <c>modifiers</c> and <c>conditions</c>.
     /// DB keys (<c>id</c>, <c>unitId</c>) are omitted to reduce payload size.
@@ -57,13 +68,13 @@ public class BsDataUnitNodeLite
         ParentId = unit.ParentId,
         Name = unit.Name,
         EntryType = unit.EntryType,
-        Points = unit.Points,
+        Points = unit.Points is { } p ? (double)p : null,
         Hidden = unit.Hidden,
         MinInRoster = unit.MinInRoster,
         MaxInRoster = unit.MaxInRoster,
-        Categories = unit.Categories,
+        Categories = unit.Categories.Select(c => new BsDataUnitCategorySlim { Name = c.Name, Primary = c.Primary }).ToList(),
         InfoLinks = unit.InfoLinks.Select(l => new BsDataInfoLinkSlim { Type = l.Type, Name = l.Name }).ToList(),
-        CostTiers = unit.CostTiers,
+        CostTiers = unit.CostTiers.Select(t => new BsDataCostTierSlim { MinModels = t.MinModels, MaxModels = t.MaxModels, Points = (double)t.Points }).ToList(),
         ModifierGroups = unit.ModifierGroups.Select(g => new BsDataModifierGroupSlim { Modifiers = g.Modifiers, Conditions = g.Conditions }).ToList(),
     };
 
