@@ -27,6 +27,8 @@ public class BsDataUnitNode
     public ICollection<BsDataEntryLink> EntryLinks { get; set; } = [];
     public ICollection<BsDataCostTier> CostTiers { get; set; } = [];
     public ICollection<BsDataModifierGroup> ModifierGroups { get; set; } = [];
+    /// <summary>BSData profiles: unit stats (TypeName="Unit") or weapon stats (TypeName contains "Weapons").</summary>
+    public ICollection<BsDataProfile> Profiles { get; set; } = [];
     /// <summary>Direct children of this entry in the selection-entry hierarchy.</summary>
     public ICollection<BsDataUnitNode> Children { get; set; } = [];
     /// <summary>
@@ -58,6 +60,7 @@ public class BsDataUnitNode
         EntryLinks = unit.EntryLinks,
         CostTiers = unit.CostTiers,
         ModifierGroups = unit.ModifierGroups,
+        Profiles = unit.Profiles,
     };
 
     /// <summary>
@@ -88,5 +91,6 @@ public class BsDataUnitNode
         Children = source.Children,
         ModifierGroups = [.. source.ModifierGroups, new BsDataModifierGroup { UnitId = source.Id, Modifiers = modifiers, Conditions = conditions }],
         RequiredUpgrades = source.RequiredUpgrades,
+        Profiles = source.Profiles,
     };
 }

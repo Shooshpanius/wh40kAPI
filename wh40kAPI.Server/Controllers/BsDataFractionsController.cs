@@ -109,11 +109,12 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
         var catalogueIds = await CollectCatalogueIdsAsync(id);
 
         var units = await db.Units.AsNoTracking()
-            .Include(u => u.Categories.Where(c => c.Primary))
+            .Include(u => u.Categories)
             .Include(u => u.InfoLinks)
             .Include(u => u.EntryLinks)
             .Include(u => u.CostTiers)
             .Include(u => u.ModifierGroups)
+            .Include(u => u.Profiles)
             .Where(u => catalogueIds.Contains(u.CatalogueId))
             .OrderBy(u => u.Name)
             .ToListAsync();

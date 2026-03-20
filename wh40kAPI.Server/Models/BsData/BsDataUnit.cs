@@ -28,4 +28,5 @@ public class BsDataUnit
     public ICollection<BsDataModifierGroup> ModifierGroups { get; set; } = [];
     public ICollection<BsDataCostTier> CostTiers { get; set; } = [];
     public ICollection<BsDataDetachmentVisibility> DetachmentVisibilities { get; set; } = [];
+    public ICollection<BsDataProfile> Profiles { get; set; } = [];
 }
