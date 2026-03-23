@@ -135,14 +135,29 @@ builder.Services.AddControllers()
 builder.Services.AddOpenApi("wh40k", options =>
 {
     options.ShouldInclude = (desc) => desc.GroupName == "wh40k";
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
+    {
+        document.Servers = [new() { Url = "https://api.wh40kcards.ru" }];
+        return Task.CompletedTask;
+    });
 });
 builder.Services.AddOpenApi("bsdata", options =>
 {
     options.ShouldInclude = (desc) => desc.GroupName == "bsdata";
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
+    {
+        document.Servers = [new() { Url = "https://api.wh40kcards.ru" }];
+        return Task.CompletedTask;
+    });
 });
 builder.Services.AddOpenApi("ktbsdata", options =>
 {
     options.ShouldInclude = (desc) => desc.GroupName == "ktbsdata";
+    options.AddDocumentTransformer((document, context, cancellationToken) =>
+    {
+        document.Servers = [new() { Url = "https://api.wh40kcards.ru" }];
+        return Task.CompletedTask;
+    });
 });
 
 var app = builder.Build();
