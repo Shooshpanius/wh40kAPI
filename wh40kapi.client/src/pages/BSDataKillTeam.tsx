@@ -25,6 +25,7 @@ interface Profile {
 
 export function BSDataKillTeam() {
     const navigate = useNavigate();
+    const [view, setView] = useState<'docs' | 'browser'>('docs');
     const [catalogues, setCatalogues] = useState<Catalogue[]>([]);
     const [selectedCatalogue, setSelectedCatalogue] = useState<Catalogue | null>(null);
     const [units, setUnits] = useState<Unit[]>([]);
@@ -65,32 +66,64 @@ export function BSDataKillTeam() {
             .finally(() => setProfilesLoading(false));
     };
 
-    if (loading) {
+    if (loading && view === 'browser') {
         return (
-            <div style={styles.page}>
-                <p style={styles.msg}>Loading...</p>
+            <div style={styles.pageWrapper}>
+                <div style={styles.tabBar}>
+                    <h2 style={styles.tabTitle}>API BSData Kill Team</h2>
+                    <div style={styles.tabs}>
+                        <button style={{ ...styles.tab }} onClick={() => setView('docs')}>📖 API Docs</button>
+                        <button style={{ ...styles.tab, ...styles.tabActive }} onClick={() => setView('browser')}>🔍 Браузер данных</button>
+                    </div>
+                </div>
+                <div style={styles.page}>
+                    <p style={styles.msg}>Loading...</p>
+                </div>
+            </div>
+        );
+    }
+
+    if (view === 'docs') {
+        return (
+            <div style={styles.pageWrapper}>
+                <div style={styles.tabBar}>
+                    <h2 style={styles.tabTitle}>API BSData Kill Team</h2>
+                    <div style={styles.tabs}>
+                        <button style={{ ...styles.tab, ...styles.tabActive }} onClick={() => setView('docs')}>📖 API Docs</button>
+                        <button style={{ ...styles.tab }} onClick={() => setView('browser')}>🔍 Браузер данных</button>
+                    </div>
+                </div>
+                <iframe src="/scalar/ktbsdata" style={styles.iframe} title="BSData Kill Team API Docs" />
             </div>
         );
     }
 
     if (error || catalogues.length === 0) {
         return (
-            <div style={styles.container}>
-                <div style={styles.icon}>🎯</div>
-                <h1 style={styles.title}>API BSData Kill Team</h1>
-                {error
-                    ? <p style={{ color: 'tomato' }}>{error}</p>
-                    : <p style={styles.subtitle}>Данные ещё не загружены. Используйте кнопку в разделе Admin.</p>
-                }
-                <p style={styles.desc}>
-                    Данные Kill Team из репозитория{' '}
-                    <a href="https://github.com/BSData/wh40k-killteam" target="_blank" rel="noopener noreferrer" style={styles.link}>
-                        BSData/wh40k-killteam
-                    </a>.
-                </p>
-                <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
-                    <button onClick={() => navigate('/')} style={styles.button}>← Вернуться на главную</button>
-                    <a href="/scalar/ktbsdata" target="_blank" rel="noopener noreferrer" style={styles.buttonLink}>📖 API Docs</a>
+            <div style={styles.pageWrapper}>
+                <div style={styles.tabBar}>
+                    <h2 style={styles.tabTitle}>API BSData Kill Team</h2>
+                    <div style={styles.tabs}>
+                        <button style={{ ...styles.tab }} onClick={() => setView('docs')}>📖 API Docs</button>
+                        <button style={{ ...styles.tab, ...styles.tabActive }} onClick={() => setView('browser')}>🔍 Браузер данных</button>
+                    </div>
+                </div>
+                <div style={styles.container}>
+                    <div style={styles.icon}>🎯</div>
+                    <h1 style={styles.title}>API BSData Kill Team</h1>
+                    {error
+                        ? <p style={{ color: 'tomato' }}>{error}</p>
+                        : <p style={styles.subtitle}>Данные ещё не загружены. Используйте кнопку в разделе Admin.</p>
+                    }
+                    <p style={styles.desc}>
+                        Данные Kill Team из репозитория{' '}
+                        <a href="https://github.com/BSData/wh40k-killteam" target="_blank" rel="noopener noreferrer" style={styles.link}>
+                            BSData/wh40k-killteam
+                        </a>.
+                    </p>
+                    <div style={{ display: 'flex', gap: 12, justifyContent: 'center', flexWrap: 'wrap' }}>
+                        <button onClick={() => navigate('/')} style={styles.button}>← Вернуться на главную</button>
+                    </div>
                 </div>
             </div>
         );
@@ -101,15 +134,21 @@ export function BSDataKillTeam() {
     const otherProfiles = profiles.filter(p => p.typeName !== 'Operative' && p.typeName !== 'Abilities');
 
     return (
-        <div style={styles.page}>
-            <div style={styles.header}>
-                <h2 style={styles.title}>API BSData Kill Team</h2>
-                <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <a href="/scalar/ktbsdata" target="_blank" rel="noopener noreferrer" style={styles.buttonLink}>📖 API Docs</a>
-                    <button onClick={() => navigate('/')} style={styles.btnSecondary}>← Главная</button>
+        <div style={styles.pageWrapper}>
+            <div style={styles.tabBar}>
+                <h2 style={styles.tabTitle}>API BSData Kill Team</h2>
+                <div style={styles.tabs}>
+                    <button style={{ ...styles.tab }} onClick={() => setView('docs')}>📖 API Docs</button>
+                    <button style={{ ...styles.tab, ...styles.tabActive }} onClick={() => setView('browser')}>🔍 Браузер данных</button>
                 </div>
             </div>
-            <p style={styles.hint}>
+            <div style={styles.page}>
+                <div style={styles.header}>
+                    <div style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                        <button onClick={() => navigate('/')} style={styles.btnSecondary}>← Главная</button>
+                    </div>
+                </div>
+                <p style={styles.hint}>
                 Данные из репозитория{' '}
                 <a href="https://github.com/BSData/wh40k-killteam" target="_blank" rel="noopener noreferrer" style={styles.link}>
                     BSData/wh40k-killteam
@@ -268,6 +307,7 @@ export function BSDataKillTeam() {
                 )}
             </div>
         </div>
+        </div>
     );
 }
 
@@ -286,9 +326,30 @@ const thStyle: React.CSSProperties = { padding: '8px 12px', background: '#8b0000
 const tdStyle: React.CSSProperties = { padding: '6px 12px', color: '#ccc', borderBottom: '1px solid #333' };
 
 const styles: Record<string, React.CSSProperties> = {
-    page: { maxWidth: 1300, margin: '32px auto', padding: '0 24px' },
+    pageWrapper: { display: 'flex', flexDirection: 'column', height: 'calc(100vh - 56px)' },
+    tabBar: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, padding: '12px 24px', borderBottom: '1px solid #333' },
+    tabTitle: { color: '#e8c170', fontSize: '1.4rem', margin: 0 },
+    tabs: { display: 'flex', gap: 8 },
+    tab: {
+        padding: '8px 16px',
+        background: 'transparent',
+        color: '#aaa',
+        border: '1px solid #555',
+        borderRadius: 6,
+        fontSize: '0.9rem',
+        cursor: 'pointer',
+        fontWeight: 400,
+    },
+    tabActive: {
+        background: '#8b0000',
+        color: '#fff',
+        border: '1px solid #8b0000',
+        fontWeight: 600,
+    },
+    iframe: { flex: 1, border: 'none', width: '100%' },
+    page: { maxWidth: 1300, margin: '32px auto', padding: '0 24px', flex: 1 },
     container: { maxWidth: 600, margin: '80px auto', padding: '0 24px', textAlign: 'center' },
-    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 12 },
+    header: { display: 'flex', justifyContent: 'flex-end', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 12 },
     icon: { fontSize: '4rem', marginBottom: '16px' },
     title: { color: '#e8c170', fontSize: '1.6rem', margin: 0 },
     subtitle: { color: '#c8c870', fontSize: '1.1rem', marginBottom: '16px' },
@@ -306,18 +367,6 @@ const styles: Record<string, React.CSSProperties> = {
         fontSize: '0.95rem',
         cursor: 'pointer',
         fontWeight: 600,
-    },
-    buttonLink: {
-        display: 'inline-block',
-        padding: '8px 16px',
-        background: '#8b0000',
-        color: '#fff',
-        border: 'none',
-        borderRadius: 6,
-        fontSize: '0.9rem',
-        cursor: 'pointer',
-        fontWeight: 600,
-        textDecoration: 'none',
     },
     btnSecondary: {
         padding: '8px 16px',
