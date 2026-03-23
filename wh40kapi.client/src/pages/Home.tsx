@@ -1,3 +1,5 @@
+import { LAST_PR_NUMBER, LAST_PR_DATE } from '../version';
+
 export function Home() {
     return (
         <div style={styles.container}>
@@ -25,6 +27,10 @@ export function Home() {
                     <a href="https://t.me/Shooshpanius" target="_blank" rel="noopener noreferrer" style={styles.button}>Telegram @Shooshpanius</a>
                     <a href="mailto:admin@in-da-house.ru" style={{ ...styles.button, marginLeft: 8 }}>Email</a>
                     <a href="https://github.com/Shooshpanius" target="_blank" rel="noopener noreferrer" style={{ ...styles.button, marginLeft: 8 }}>GitHub</a>
+                </div>
+
+                <div style={{ marginTop: 12, color: '#888', fontSize: '0.8rem' }}>
+                    Beta version #0.0.{LAST_PR_NUMBER} от {LAST_PR_DATE}
                 </div>
             </div>
         </div>
