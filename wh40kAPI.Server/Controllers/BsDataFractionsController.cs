@@ -113,7 +113,8 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     /// <summary>
     /// Returns a flat list of all units belonging to the fraction.
     /// Each item contains only: <c>id</c>, <c>catalogueId</c>, <c>name</c>,
-    /// <c>entryType</c>, <c>points</c>, <c>hidden</c>, and <c>categories</c>.
+    /// <c>entryType</c>, <c>points</c>, <c>hidden</c>, <c>categories</c>, and
+    /// <c>requiredUpgrades</c> (populated for root model nodes only).
     /// </summary>
     [HttpGet("{id}/unitsList")]
     public async Task<ActionResult<IEnumerable<BsDataUnitNodeLite>>> GetUnitsTreeLite(string id)
@@ -126,10 +127,42 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
         var units = await db.Units.AsNoTracking()
             .Where(u => catalogueIds.Contains(u.CatalogueId))
             .Include(u => u.Categories)
+            .Include(u => u.ModifierGroups)
             .OrderBy(u => u.Name)
             .ToListAsync();
 
-        return Ok(units.Select(BsDataUnitNodeLite.FromUnit));
+        // Build a lookup from parentId → upgrade children with minInRoster > 0.
+        // Used to populate RequiredUpgrades on root model nodes (depth=0).
+        var upgradeChildrenByParent = units
+            .Where(u => u.ParentId is not null && u.EntryType == "upgrade" && u.MinInRoster > 0)
+            .GroupBy(u => u.ParentId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.ToList(), StringComparer.OrdinalIgnoreCase);
+
+        var result = units.Select(u =>
+        {
+            var node = BsDataUnitNodeLite.FromUnit(u);
+            if (u.ParentId is null && u.EntryType == "model"
+                && upgradeChildrenByParent.TryGetValue(u.Id, out var upgradeChildren))
+            {
+                var requiredUpgrades = upgradeChildren
+                    .Select(c => new BsDataRequiredUpgrade
+                    {
+                        Id = c.Id,
+                        Name = c.Name,
+                        MinInRoster = c.MinInRoster,
+                        MaxInRoster = c.MaxInRoster,
+                        RequiredDetachmentId = ExtractRequiredDetachmentId(c.ModifierGroups),
+                    })
+                    .Where(r => r.RequiredDetachmentId is not null)
+                    .ToList();
+
+                if (requiredUpgrades.Count > 0)
+                    node.RequiredUpgrades = requiredUpgrades;
+            }
+            return node;
+        });
+
+        return Ok(result);
     }
 
     /// <summary>
