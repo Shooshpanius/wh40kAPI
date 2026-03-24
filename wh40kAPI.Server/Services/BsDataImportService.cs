@@ -326,11 +326,21 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
         var detachmentVisibilities = new List<BsDataDetachmentVisibility>();
         var seenUnitIds = new HashSet<string>();
 
+        // Build a lookup from entry id → XElement for all shared selection entries so that
+        // catalogue-level entryLinks can fall back to checking the target entry's own modifiers
+        // for detachment-dependency conditions (e.g. Death Guard Daemon units that are only
+        // available when the "Tallyband Summoners" detachment upgrade is selected).
+        var sharedEntriesById = new Dictionary<string, XElement>(StringComparer.OrdinalIgnoreCase);
+
         // Parse sharedSelectionEntries (top-level reusable units/models)
         foreach (var entry in root
             .Element(Ns + "sharedSelectionEntries")
             ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
+            var entryId = entry.Attribute("id")?.Value;
+            if (!string.IsNullOrEmpty(entryId))
+                sharedEntriesById.TryAdd(entryId, entry);
+
             ExtractEntry(entry, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, detachmentVisibilities, seenUnitIds);
         }
 
@@ -339,6 +349,10 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .Element(Ns + "sharedSelectionEntryGroups")
             ?.Elements(Ns + "selectionEntryGroup") ?? Enumerable.Empty<XElement>())
         {
+            var groupId = group.Attribute("id")?.Value;
+            if (!string.IsNullOrEmpty(groupId))
+                sharedEntriesById.TryAdd(groupId, group);
+
             ExtractEntry(group, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, detachmentVisibilities, seenUnitIds);
         }
 
@@ -347,6 +361,10 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             .Element(Ns + "selectionEntries")
             ?.Elements(Ns + "selectionEntry") ?? Enumerable.Empty<XElement>())
         {
+            var entryId = entry.Attribute("id")?.Value;
+            if (!string.IsNullOrEmpty(entryId))
+                sharedEntriesById.TryAdd(entryId, entry);
+
             ExtractEntry(entry, id, null, units, profiles, categories, infoLinks, entryLinks, constraints, modifierGroups, costTiers, detachmentVisibilities, seenUnitIds);
         }
 
@@ -403,6 +421,12 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
             if (string.IsNullOrEmpty(targetId)) continue;
             if (!seenCatalogueEntryLinkTargets.Add(targetId)) continue;
             var (detachmentModifiers, detachmentConditions) = ParseEntryLinkDetachmentDependency(el);
+            // If no dependency was found on the entryLink itself, fall back to checking the
+            // target shared entry's own modifiers.  Some factions (e.g. Death Guard Daemon
+            // units) encode the "hide unless detachment selected" pattern using scope="force"
+            // conditions directly on the selectionEntry definition rather than on the link.
+            if (detachmentModifiers == null && sharedEntriesById.TryGetValue(targetId, out var targetEntry))
+                (detachmentModifiers, detachmentConditions) = ParseSelectionEntryDetachmentDependency(targetEntry);
             catalogueLevelEntryLinks.Add(new BsDataCatalogueEntryLink
             {
                 CatalogueId = id,
@@ -1007,6 +1031,75 @@ public class BsDataImportService(BsDataDbContext db, IHttpClientFactory httpClie
                         new { field = "hidden", type = "set", value = "false" },
                     });
                     var unlockConditions = JsonSerializer.Serialize(rosterConditions);
+                    return (unlockModifiers, unlockConditions);
+                }
+            }
+        }
+
+        return (null, null);
+    }
+
+    /// <summary>
+    /// Detects the "hide unless detachment selected" pattern directly on a
+    /// <c>&lt;selectionEntry&gt;</c> element (as opposed to on a catalogue-level
+    /// <c>&lt;entryLink&gt;</c>).  Returns the inverted unlock
+    /// <c>(modifiers, conditions)</c> JSON strings, or <c>(null, null)</c> if absent.
+    /// <para>
+    /// Pattern detected:
+    /// <code>
+    /// &lt;modifier type="set" value="true" field="hidden"&gt;
+    ///   &lt;conditionGroups&gt;&lt;conditionGroup type="and"&gt;&lt;conditions&gt;
+    ///     &lt;condition scope="force" field="selections" type="lessThan" value="1" childId="&lt;DETACHMENT-ID&gt;"/&gt;
+    ///   &lt;/conditions&gt;&lt;/conditionGroup&gt;&lt;/conditionGroups&gt;
+    /// &lt;/modifier&gt;
+    /// </code>
+    /// Conditions with <c>type="notInstanceOf"</c> (Crusade mode markers) are ignored.
+    /// </para>
+    /// </summary>
+    private static (string? Modifiers, string? Conditions) ParseSelectionEntryDetachmentDependency(XElement entry)
+    {
+        foreach (var mod in entry.Element(Ns + "modifiers")?.Elements(Ns + "modifier") ?? Enumerable.Empty<XElement>())
+        {
+            if (!string.Equals(mod.Attribute("type")?.Value, "set", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(mod.Attribute("field")?.Value, "hidden", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!string.Equals(mod.Attribute("value")?.Value, "true", StringComparison.OrdinalIgnoreCase)) continue;
+
+            var conditionGroups = mod.Element(Ns + "conditionGroups");
+            if (conditionGroups == null) continue;
+
+            foreach (var group in conditionGroups.Elements(Ns + "conditionGroup"))
+            {
+                if (!string.Equals(group.Attribute("type")?.Value, "and", StringComparison.OrdinalIgnoreCase)) continue;
+
+                // Collect force-scope + selections + lessThan conditions (detachment references).
+                // Explicitly require type="lessThan" to exclude "notInstanceOf" Crusade-mode checks
+                // which also use scope="force" but are not detachment selection conditions.
+                var forceConditions = group
+                    .Element(Ns + "conditions")
+                    ?.Elements(Ns + "condition")
+                    .Where(c =>
+                        string.Equals(c.Attribute("scope")?.Value, "force", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(c.Attribute("field")?.Value, "selections", StringComparison.OrdinalIgnoreCase) &&
+                        string.Equals(c.Attribute("type")?.Value, "lessThan", StringComparison.OrdinalIgnoreCase))
+                    .Select(c => new
+                    {
+                        field = c.Attribute("field")?.Value,
+                        scope = c.Attribute("scope")?.Value,
+                        // Invert: lessThan 1 (not selected) → atLeast 1 (selected)
+                        type = "atLeast",
+                        value = "1",
+                        childId = c.Attribute("childId")?.Value,
+                    })
+                    .Where(c => !string.IsNullOrEmpty(c.childId))
+                    .ToList();
+
+                if (forceConditions is { Count: > 0 })
+                {
+                    var unlockModifiers = JsonSerializer.Serialize(new[]
+                    {
+                        new { field = "hidden", type = "set", value = "false" },
+                    });
+                    var unlockConditions = JsonSerializer.Serialize(forceConditions);
                     return (unlockModifiers, unlockConditions);
                 }
             }
