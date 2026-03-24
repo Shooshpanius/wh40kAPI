@@ -111,6 +111,27 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     }
 
     /// <summary>
+    /// Returns a slim classification list for all units belonging to the fraction.
+    /// Each item contains only: <c>id</c>, <c>catalogueId</c>, and <c>categories</c>.
+    /// </summary>
+    [HttpGet("{id}/units-classification")]
+    public async Task<ActionResult<IEnumerable<BsDataUnitClassification>>> GetUnitsClassification(string id)
+    {
+        if (!await db.Catalogues.AnyAsync(c => c.Id == id && !c.Library))
+            return NotFound();
+
+        var catalogueIds = await CollectCatalogueIdsAsync(id);
+
+        var units = await db.Units.AsNoTracking()
+            .Where(u => catalogueIds.Contains(u.CatalogueId))
+            .Include(u => u.Categories)
+            .OrderBy(u => u.Name)
+            .ToListAsync();
+
+        return Ok(units.Select(BsDataUnitClassification.FromUnit));
+    }
+
+    /// <summary>
     /// Returns a flat list of all units belonging to the fraction.
     /// Each item contains only: <c>id</c>, <c>catalogueId</c>, <c>name</c>,
     /// <c>entryType</c>, <c>points</c>, <c>hidden</c>, <c>categories</c>, and
