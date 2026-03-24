@@ -507,6 +507,41 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     }
 
     /// <summary>
+    /// Returns a flat list of unit–detachment associations for the given fraction.
+    /// Each item identifies a unit and the set of detachment IDs that are required to
+    /// unlock it, as encoded in the roster-scope <c>DetachmentConditions</c> of the
+    /// catalogue-level entry links.
+    /// </summary>
+    [HttpGet("{id}/detachment-conditions")]
+    public async Task<ActionResult<IEnumerable<BsDataUnitDetachmentConditions>>> GetDetachmentConditions(string id)
+    {
+        if (!await db.Catalogues.AnyAsync(c => c.Id == id && !c.Library))
+            return NotFound();
+
+        var catalogueIds = await CollectCatalogueIdsAsync(id);
+
+        var links = await db.CatalogueLevelEntryLinks
+            .AsNoTracking()
+            .Where(l => catalogueIds.Contains(l.CatalogueId) && l.DetachmentConditions != null)
+            .ToListAsync();
+
+        var result = links
+            .Select(l => new { l.TargetId, DetachmentIds = ExtractDetachmentIds(l.DetachmentConditions) })
+            .Where(x => x.DetachmentIds.Count > 0)
+            .GroupBy(x => x.TargetId, StringComparer.OrdinalIgnoreCase)
+            .Select(g => new BsDataUnitDetachmentConditions
+            {
+                UnitId = g.Key,
+                DetachmentIds = g.SelectMany(x => x.DetachmentIds)
+                                 .Distinct(StringComparer.OrdinalIgnoreCase)
+                                 .ToList(),
+            })
+            .ToList();
+
+        return Ok(result);
+    }
+
+    /// <summary>
     /// Inspects a node's <see cref="BsDataModifierGroup"/> collection and returns the
     /// detachment entry id that is required to "un-hide" the entry, or <c>null</c> if no
     /// such dependency is found.
@@ -556,6 +591,36 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
         }
 
         return null;
+    }
+
+    /// <summary>
+    /// Parses a <c>DetachmentConditions</c> JSON array and returns every distinct
+    /// <c>childId</c> found in it.  Returns an empty list when <paramref name="conditions"/>
+    /// is <see langword="null"/> or contains no valid <c>childId</c> entries.
+    /// </summary>
+    private static List<string> ExtractDetachmentIds(string? conditions)
+    {
+        if (conditions is null)
+            return [];
+
+        var ids = new List<string>();
+        try
+        {
+            using var doc = JsonDocument.Parse(conditions);
+            foreach (var cond in doc.RootElement.EnumerateArray())
+            {
+                if (cond.TryGetProperty("childId", out var childId) &&
+                    childId.ValueKind == JsonValueKind.String &&
+                    childId.GetString() is { Length: > 0 } detachmentId)
+                    ids.Add(detachmentId);
+            }
+        }
+        catch (JsonException)
+        {
+            // Skip malformed JSON — should not happen with well-formed import data.
+        }
+
+        return ids;
     }
 
     /// <summary>
