@@ -34,7 +34,12 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
 
     /// <summary>
     /// Returns the fraction's own catalogue ids: the fraction's id itself plus every catalogueId
-    /// reachable from it via catalogueLinks with importRootEntries=true (resolved recursively).
+    /// reachable from it via catalogueLinks with importRootEntries=true (resolved recursively),
+    /// and also via catalogueLinks pointing to library catalogues (library=true) regardless of
+    /// the importRootEntries flag — library catalogues are internal shared dependencies
+    /// (e.g. Chaos - Daemons Library for Death Guard) and are always considered "own".
+    /// Full faction catalogues linked without importRootEntries (e.g. Chaos Space Marines
+    /// linked from Chaos Daemons) are NOT included.
     /// </summary>
     [HttpGet("{id}/ownCatalogues")]
     public async Task<ActionResult<IEnumerable<string>>> GetOwnCatalogues(string id)
@@ -651,9 +656,12 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     /// </summary>
     /// <param name="rootId">The starting catalogue ID.</param>
     /// <param name="importRootEntriesOnly">
-    /// When <c>true</c>, only follows links where <c>importRootEntries=true</c>,
-    /// preventing detachments from catalogues that don't export their root entries
-    /// from appearing in results (e.g. Chaos Space Marines linked from Chaos Daemons).
+    /// When <c>true</c>, follows links where <c>importRootEntries=true</c> AND links
+    /// whose target catalogue has <c>library=true</c> (internal shared library
+    /// dependencies are always "own" regardless of the importRootEntries flag).
+    /// Full faction catalogues linked without importRootEntries are excluded
+    /// (e.g. Chaos Space Marines linked from Chaos Daemons).
+    /// When <c>false</c>, all catalogue links are followed.
     /// </param>
     private async Task<HashSet<string>> CollectCatalogueIdsAsync(string rootId, bool importRootEntriesOnly = false)
     {
@@ -662,8 +670,20 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             .Select(l => new { l.CatalogueId, l.TargetId, l.ImportRootEntries })
             .ToListAsync();
 
+        // When importRootEntriesOnly is true, also allow links to library catalogues
+        // (library=true) so that internal shared dependencies are always included as
+        // "own" even when BSData omits the importRootEntries flag on the link
+        // (e.g. Chaos - Daemons Library linked from Death Guard without importRootEntries).
+        var libraryCatalogueIds = importRootEntriesOnly
+            ? (await db.Catalogues.AsNoTracking()
+                .Where(c => c.Library)
+                .Select(c => c.Id)
+                .ToListAsync())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase)
+            : new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
         var linkMap = allLinks
-            .Where(l => !importRootEntriesOnly || l.ImportRootEntries)
+            .Where(l => !importRootEntriesOnly || l.ImportRootEntries || libraryCatalogueIds.Contains(l.TargetId))
             .GroupBy(l => l.CatalogueId, StringComparer.OrdinalIgnoreCase)
             .ToDictionary(g => g.Key, g => g.Select(l => l.TargetId).ToList(), StringComparer.OrdinalIgnoreCase);
 
