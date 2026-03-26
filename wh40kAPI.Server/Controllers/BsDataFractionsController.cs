@@ -118,7 +118,7 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             return NotFound();
 
         var catalogueIds = await CollectCatalogueIdsAsync(id);
-        return Ok(await BuildUnitsTreeAsync(catalogueIds, includeProfiles: true));
+        return Ok(await BuildUnitsTreeAsync(id, catalogueIds, includeProfiles: true));
     }
 
     /// <summary>
@@ -138,6 +138,8 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             .Include(u => u.Categories)
             .OrderBy(u => u.Name)
             .ToListAsync();
+
+        units = await FilterNonImportLibraryUnitsAsync(id, catalogueIds, units);
 
         return Ok(units.Select(BsDataUnitClassification.FromUnit));
     }
@@ -162,6 +164,10 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             .Include(u => u.ModifierGroups)
             .OrderBy(u => u.Name)
             .ToListAsync();
+
+        // Filter out units from library catalogues linked without importRootEntries
+        // (e.g. non-Nurgle daemons from Daemons Library for Death Guard)
+        units = await FilterNonImportLibraryUnitsAsync(id, catalogueIds, units);
 
         // Build a lookup from parentId → upgrade children with minInRoster > 0.
         // Used to populate RequiredUpgrades on root model nodes (depth=0).
@@ -203,9 +209,11 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
     /// are not loaded from the database and every node's <c>Profiles</c> collection
     /// will be empty — suitable for lightweight list endpoints.
     /// </summary>
+    /// <param name="factionId">The root faction catalogue ID, used to filter out units from library catalogues linked without importRootEntries.</param>
     /// <param name="catalogueIds">The set of catalogue IDs (faction catalogue plus all transitively linked catalogues) whose units are included in the tree.</param>
     /// <param name="includeProfiles">When <see langword="true"/> unit and weapon profiles are eagerly loaded; pass <see langword="false"/> for the lightweight <c>/unitsList</c> endpoint.</param>
     private async Task<List<BsDataUnitNode>> BuildUnitsTreeAsync(
+        string factionId,
         HashSet<string> catalogueIds, bool includeProfiles)
     {
         IQueryable<BsDataUnit> query = db.Units.AsNoTracking()
@@ -222,6 +230,10 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             .Where(u => catalogueIds.Contains(u.CatalogueId))
             .OrderBy(u => u.Name)
             .ToListAsync();
+
+        // Filter out units from library catalogues linked without importRootEntries
+        // (e.g. non-Nurgle daemons from Daemons Library for Death Guard)
+        units = await FilterNonImportLibraryUnitsAsync(factionId, catalogueIds, units);
 
         // Convert every unit to a node and index by id for O(1) child lookup.
         var nodeById = units.ToDictionary(u => u.Id, BsDataUnitNode.FromUnit);
@@ -711,6 +723,91 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
         }
 
         return visited;
+    }
+
+    /// <summary>
+    /// Collects the set of catalogue IDs reachable from <paramref name="rootId"/> by following
+    /// ONLY catalogue links where <c>importRootEntries=true</c>.
+    /// Unlike <see cref="CollectCatalogueIdsAsync(string, bool)"/> with
+    /// <c>importRootEntriesOnly=true</c>, this method does NOT apply the library-type
+    /// fallback — library catalogues reached only through non-importRootEntries links
+    /// (e.g. the Daemons Library linked from Death Guard) are excluded.
+    /// </summary>
+    private async Task<HashSet<string>> CollectStrictImportRootEntriesIdsAsync(string rootId)
+    {
+        var allLinks = await db.CatalogueLinks.AsNoTracking()
+            .Select(l => new { l.CatalogueId, l.TargetId, l.ImportRootEntries })
+            .ToListAsync();
+
+        var linkMap = allLinks
+            .Where(l => l.ImportRootEntries)
+            .GroupBy(l => l.CatalogueId, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Select(l => l.TargetId).ToList(),
+                          StringComparer.OrdinalIgnoreCase);
+
+        var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { rootId };
+        var queue = new Queue<string>();
+        queue.Enqueue(rootId);
+
+        while (queue.Count > 0)
+        {
+            var current = queue.Dequeue();
+            if (!linkMap.TryGetValue(current, out var linkedIds)) continue;
+            foreach (var targetId in linkedIds)
+                if (visited.Add(targetId)) queue.Enqueue(targetId);
+        }
+        return visited;
+    }
+
+    /// <summary>
+    /// Filters <paramref name="units"/> to exclude units from library catalogues that are
+    /// only reachable via non-importRootEntries links (e.g. the Daemons Library for Death Guard).
+    /// For such catalogues, only units explicitly listed in <c>CatalogueLevelEntryLinks</c>
+    /// from the strict import-root-entries catalogue set (plus their descendants by parentId)
+    /// are retained.
+    /// Returns the original list unchanged when no non-import library catalogues are present.
+    /// </summary>
+    private async Task<List<BsDataUnit>> FilterNonImportLibraryUnitsAsync(
+        string factionId,
+        HashSet<string> allCatalogueIds,
+        List<BsDataUnit> units)
+    {
+        var strictIds = await CollectStrictImportRootEntriesIdsAsync(factionId);
+        var nonImportLibraryIds = allCatalogueIds
+            .Where(cid => !strictIds.Contains(cid))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        if (nonImportLibraryIds.Count == 0)
+            return units;
+
+        // Units explicitly linked via catalogue-level entryLinks from the strict-import chain
+        var directlyAllowedTargets = await db.CatalogueLevelEntryLinks.AsNoTracking()
+            .Where(l => strictIds.Contains(l.CatalogueId))
+            .Select(l => l.TargetId)
+            .ToListAsync();
+
+        // Expand to include descendants (children by parentId) of directly allowed units.
+        // Build a parent→children lookup for non-import-library units so we can do
+        // a queue-based BFS in O(n) rather than a repeated full scan.
+        var childrenByParent = units
+            .Where(u => nonImportLibraryIds.Contains(u.CatalogueId) && u.ParentId is not null)
+            .GroupBy(u => u.ParentId!, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(g => g.Key, g => g.Select(u => u.Id).ToList(),
+                          StringComparer.OrdinalIgnoreCase);
+
+        var expandedAllowed = directlyAllowedTargets.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var queue = new Queue<string>(directlyAllowedTargets);
+        while (queue.Count > 0)
+        {
+            var parentId = queue.Dequeue();
+            if (!childrenByParent.TryGetValue(parentId, out var childIds)) continue;
+            foreach (var childId in childIds)
+                if (expandedAllowed.Add(childId)) queue.Enqueue(childId);
+        }
+
+        return units
+            .Where(u => !nonImportLibraryIds.Contains(u.CatalogueId) || expandedAllowed.Contains(u.Id))
+            .ToList();
     }
 
     /// <summary>
