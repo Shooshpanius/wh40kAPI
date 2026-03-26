@@ -48,6 +48,12 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
             return NotFound();
 
         var ownIds = await CollectCatalogueIdsAsync(id, importRootEntriesOnly: true);
+
+        // Filter out library catalogues that are actually "Allied" for this faction.
+        var alliedIds = await DetermineAlliedLibraryCatalogueIdsAsync(id);
+        foreach (var allied in alliedIds)
+            ownIds.Remove(allied);
+
         return Ok(ownIds);
     }
 
@@ -705,5 +711,170 @@ public class BsDataFractionsController(BsDataDbContext db) : ControllerBase
         }
 
         return visited;
+    }
+
+    /// <summary>
+    /// Determines which library catalogues reachable from <paramref name="factionId"/> are
+    /// "Allied" rather than "own" — meaning they primarily belong to a different faction.
+    /// Two rules are applied:
+    /// <list type="bullet">
+    ///   <item><b>Rule 1 (primary-faction signal)</b>: a library L is Allied if its units
+    ///   carry <c>notInstanceOf(scope=primary-catalogue, childId=G)</c> modifiers where G ≠ F,
+    ///   and none of those units carry <c>notInstanceOf(..., childId=F)</c>.</item>
+    ///   <item><b>Rule 2 (library-based faction signal)</b>: a library L is Allied if faction F
+    ///   has its own root units (F is not library-based) and at least one library-based faction
+    ///   (a faction with no own root units) also links to L via <c>importRootEntries=true</c>.</item>
+    /// </list>
+    /// </summary>
+    private async Task<HashSet<string>> DetermineAlliedLibraryCatalogueIdsAsync(string factionId)
+    {
+        var ownIds = await CollectCatalogueIdsAsync(factionId, importRootEntriesOnly: true);
+        ownIds.Remove(factionId); // the faction's own catalogue is never Allied
+
+        // Narrow to library catalogues only.
+        var libraryIds = await db.Catalogues.AsNoTracking()
+            .Where(c => c.Library && ownIds.Contains(c.Id))
+            .Select(c => c.Id)
+            .ToListAsync();
+
+        if (libraryIds.Count == 0)
+            return [];
+
+        var alliedIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        // ── Rule 1: primary-faction signal ──────────────────────────────────────
+        // Collect modifier groups for units in the library catalogues whose
+        // modifiers set hidden=true (the "Allied visibility" pattern).
+        var unitLookup = await db.Units.AsNoTracking()
+            .Where(u => libraryIds.Contains(u.CatalogueId))
+            .Select(u => new { u.Id, u.CatalogueId })
+            .ToListAsync();
+
+        var unitIdToCatalogueId = unitLookup
+            .ToDictionary(u => u.Id, u => u.CatalogueId, StringComparer.OrdinalIgnoreCase);
+
+        var unitIds = unitIdToCatalogueId.Keys.ToList();
+
+        var modifierGroups = await db.ModifierGroups.AsNoTracking()
+            .Where(mg => unitIds.Contains(mg.UnitId) && mg.Modifiers != null && mg.Conditions != null)
+            .Select(mg => new { mg.UnitId, mg.Modifiers, mg.Conditions })
+            .ToListAsync();
+
+        // Build a set of primary-faction childIds per library catalogue.
+        var primaryFactionIdsByLib = libraryIds
+            .ToDictionary(id => id, _ => new HashSet<string>(StringComparer.OrdinalIgnoreCase),
+                StringComparer.OrdinalIgnoreCase);
+
+        foreach (var mg in modifierGroups)
+        {
+            if (!unitIdToCatalogueId.TryGetValue(mg.UnitId, out var catId))
+                continue;
+            if (!ModifierGroupSetsHiddenTrue(mg.Modifiers!))
+                continue;
+            foreach (var childId in GetNotInstanceOfPrimaryCatalogueChildIds(mg.Conditions!))
+                primaryFactionIdsByLib[catId].Add(childId);
+        }
+
+        foreach (var (libId, primaryIds) in primaryFactionIdsByLib)
+        {
+            // Allied: the library signals a primary faction that is NOT factionId.
+            if (primaryIds.Count > 0 && !primaryIds.Contains(factionId))
+                alliedIds.Add(libId);
+        }
+
+        // ── Rule 2: library-based faction signal ────────────────────────────────
+        // A faction is "library-based" when it has no own root units (parentId=null)
+        // in its own catalogue; all its units come from linked libraries (e.g. CK, IK).
+        var factionHasOwnRootUnits = await db.Units.AsNoTracking()
+            .AnyAsync(u => u.CatalogueId == factionId && u.ParentId == null);
+
+        if (factionHasOwnRootUnits)
+        {
+            var allFactionIds = await db.Catalogues.AsNoTracking()
+                .Where(c => !c.Library)
+                .Select(c => c.Id)
+                .ToListAsync();
+
+            var factionsWithOwnRootUnits = await db.Units.AsNoTracking()
+                .Where(u => allFactionIds.Contains(u.CatalogueId) && u.ParentId == null)
+                .Select(u => u.CatalogueId)
+                .Distinct()
+                .ToListAsync();
+
+            var libraryBasedFactionIds = allFactionIds
+                .Except(factionsWithOwnRootUnits, StringComparer.OrdinalIgnoreCase)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            libraryBasedFactionIds.Remove(factionId);
+
+            if (libraryBasedFactionIds.Count > 0)
+            {
+                var libLinkedByLibraryBasedFactions = await db.CatalogueLinks.AsNoTracking()
+                    .Where(l => libraryBasedFactionIds.Contains(l.CatalogueId)
+                                && l.ImportRootEntries
+                                && libraryIds.Contains(l.TargetId))
+                    .Select(l => l.TargetId)
+                    .Distinct()
+                    .ToListAsync();
+
+                foreach (var libId in libLinkedByLibraryBasedFactions)
+                    alliedIds.Add(libId);
+            }
+        }
+
+        return alliedIds;
+    }
+
+    /// <summary>
+    /// Returns <c>true</c> when the modifier group JSON array contains an entry
+    /// with <c>field="hidden"</c> and <c>value="true"</c>.
+    /// </summary>
+    private static bool ModifierGroupSetsHiddenTrue(string modifiers)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(modifiers);
+            return doc.RootElement.EnumerateArray().Any(m =>
+                m.TryGetProperty("field", out var f) &&
+                f.ValueKind == JsonValueKind.String &&
+                string.Equals(f.GetString(), "hidden", StringComparison.OrdinalIgnoreCase) &&
+                m.TryGetProperty("value", out var v) &&
+                v.ValueKind == JsonValueKind.String &&
+                string.Equals(v.GetString(), "true", StringComparison.OrdinalIgnoreCase));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Parses a condition group JSON array and returns all <c>childId</c> values for
+    /// conditions with <c>type="notInstanceOf"</c> and <c>scope="primary-catalogue"</c>.
+    /// </summary>
+    private static IEnumerable<string> GetNotInstanceOfPrimaryCatalogueChildIds(string conditions)
+    {
+        var ids = new List<string>();
+        try
+        {
+            using var doc = JsonDocument.Parse(conditions);
+            foreach (var cond in doc.RootElement.EnumerateArray())
+            {
+                if (!cond.TryGetProperty("type", out var typeProp) ||
+                    !string.Equals(typeProp.GetString(), "notInstanceOf", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (!cond.TryGetProperty("scope", out var scopeProp) ||
+                    !string.Equals(scopeProp.GetString(), "primary-catalogue", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                if (cond.TryGetProperty("childId", out var childId) &&
+                    childId.ValueKind == JsonValueKind.String &&
+                    childId.GetString() is { Length: > 0 } id)
+                    ids.Add(id);
+            }
+        }
+        catch (JsonException)
+        {
+            // Skip malformed JSON — should not happen with well-formed import data.
+        }
+        return ids;
     }
 }
